@@ -1,4 +1,4 @@
-FROM ghcr.io/openclaw/openclaw:2026.3.12
+FROM ghcr.io/openclaw/openclaw:2026.3.11
 USER root
 ENV HOME=/root
 WORKDIR /root
