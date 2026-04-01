@@ -1,0 +1,322 @@
+#!/usr/bin/env node
+'use strict';
+
+const https = require('https');
+const http = require('http');
+const fs = require('fs');
+const { execSync } = require('child_process');
+
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TG_CHAT  = '2053892551';
+const BASE_DIR = '/root/bootstrapclaw';
+const DRAFTS   = BASE_DIR + '/data/drafts';
+const RUNS_LOG = BASE_DIR + '/data/runs.log';
+const IDEAS    = BASE_DIR + '/data/article-ideas.md';
+
+if (!TG_TOKEN) { console.error('TELEGRAM_BOT_TOKEN not set'); process.exit(1); }
+
+// ── PROVIDERS ────────────────────────────────────────────────────────────────
+const PROVIDERS = {
+  cerebras:        { url: 'https://api.cerebras.ai/v1/chat/completions',     key: function(){ return process.env.CEREBRAS_API_KEY; },  model: 'qwen-3-235b-a22b-instruct-2507', maxTokens: 4096 },
+  sambanova_qwen:  { url: 'https://api.sambanova.ai/v1/chat/completions',    key: function(){ return process.env.SAMBANOVA_API_KEY; }, model: 'Qwen3-235B',                     maxTokens: 4096 },
+  sambanova_llama: { url: 'https://api.sambanova.ai/v1/chat/completions',    key: function(){ return process.env.SAMBANOVA_API_KEY; }, model: 'Meta-Llama-3.3-70B-Instruct',    maxTokens: 4096 },
+  ollama:          { url: 'https://ollama.com/v1/chat/completions',          key: function(){ return process.env.OLLAMA_API_KEY; },    model: 'gemma3:27b',                     maxTokens: 2048 },
+  groq_kimi:       { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'moonshotai/kimi-k2-instruct',    maxTokens: 2048 },
+  groq_fallback:   { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'llama-3.1-8b-instant',          maxTokens: 2048 },
+};
+
+const CHAINS = {
+  researcher:   ['sambanova_llama', 'sambanova_qwen', 'ollama', 'groq_kimi', 'groq_fallback'],
+  writer:       ['sambanova_qwen',  'sambanova_llama', 'ollama', 'groq_kimi', 'groq_fallback'],
+  reporter:     ['groq_kimi', 'ollama', 'groq_fallback'],
+  orchestrator: ['cerebras', 'sambanova_qwen', 'groq_kimi', 'groq_fallback'],
+};
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+var offset = 0;
+var pipelineStatus = 'idle';
+var currentKeyword = null;
+
+// ── LOGGING ──────────────────────────────────────────────────────────────────
+function log(msg) {
+  console.log('[' + new Date().toISOString() + '] ' + msg);
+}
+
+// ── HTTP POST ────────────────────────────────────────────────────────────────
+function httpPost(urlStr, headers, body) {
+  return new Promise(function(resolve, reject) {
+    var url = new URL(urlStr);
+    var lib = url.protocol === 'https:' ? https : http;
+    var bodyStr = JSON.stringify(body);
+    var reqHeaders = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr) };
+    Object.keys(headers).forEach(function(k) { reqHeaders[k] = headers[k]; });
+    var req = lib.request({
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: 'POST',
+      headers: reqHeaders
+    }, function(res) {
+      var data = '';
+      res.on('data', function(c) { data += c; });
+      res.on('end', function() {
+        try { resolve(JSON.parse(data)); }
+        catch(e) { reject(new Error('JSON parse failed: ' + data.slice(0,200))); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, function() { req.destroy(); reject(new Error('Timeout 60s')); });
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ── CORE LLM CALLER ──────────────────────────────────────────────────────────
+async function callLLM(chain, sys, usr) {
+  var keys = CHAINS[chain];
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var p = PROVIDERS[key];
+    var apiKey = p.key();
+    if (!apiKey) { log('[LLM] No key for ' + key); continue; }
+    try {
+      log('[LLM] Trying ' + key + ' (' + p.model + ')');
+      var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
+        model: p.model,
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+        max_tokens: p.maxTokens,
+        temperature: 0.7
+      });
+      var content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+      if (content && content.trim().length > 0) {
+        log('[LLM] OK ' + key + ' ' + content.length + ' chars');
+        return { content: content.trim(), provider: key, model: p.model };
+      }
+      log('[LLM] Empty from ' + key + ': ' + JSON.stringify(res).slice(0,150));
+    } catch(e) {
+      log('[LLM] ' + key + ' error: ' + e.message);
+    }
+  }
+  throw new Error('All providers failed for chain: ' + chain);
+}
+
+// ── TAVILY SEARCH ────────────────────────────────────────────────────────────
+async function tavilySearch(query) {
+  var key = process.env.TAVILY_API_KEY;
+  if (!key) throw new Error('TAVILY_API_KEY not set');
+  var res = await httpPost('https://api.tavily.com/search', { Authorization: 'Bearer ' + key }, {
+    query: query, max_results: 6, search_depth: 'advanced', include_raw_content: false
+  });
+  if (!res.results || !res.results.length) throw new Error('Tavily returned no results');
+  return res.results.map(function(r) {
+    return { title: r.title, url: r.url, snippet: (r.content || '').slice(0,300) };
+  });
+}
+
+// ── PHASE 1: RESEARCHER ──────────────────────────────────────────────────────
+async function runResearcher(keyword) {
+  log('[P1] Researching: ' + keyword);
+  await send('🔍 *Phase 1 — Research*\nSearching: _' + keyword + '_');
+
+  var results = await tavilySearch(keyword);
+  log('[P1] Tavily: ' + results.length + ' results');
+
+  var sys = 'You are a research analyst. Synthesize web search results into structured article research.\nOnly include facts backed by the provided sources.\nOutput ONLY valid JSON — no markdown, no code fences, no explanation.';
+
+  var sourcesText = results.map(function(r, i) {
+    return '[' + (i+1) + '] ' + r.title + '\nURL: ' + r.url + '\n' + r.snippet;
+  }).join('\n\n');
+
+  var usr = 'Keyword: "' + keyword + '"\n\nSources:\n' + sourcesText + '\n\nReturn this exact JSON structure:\n{\n  "keyword": "' + keyword + '",\n  "angle": "most interesting article angle",\n  "key_points": ["point 1","point 2","point 3","point 4","point 5"],\n  "stats": ["specific stat with source","another stat"],\n  "sources": [{"title":"...","url":"..."}],\n  "outline": ["Section 1","Section 2","Section 3","Section 4"],\n  "target_reader": "who this article is for in one sentence"\n}';
+
+  var result = await callLLM('researcher', sys, usr);
+
+  var research;
+  try {
+    var cleaned = result.content.replace(/```json/g,'').replace(/```/g,'').trim();
+    research = JSON.parse(cleaned);
+  } catch(e) {
+    throw new Error('Bad JSON from researcher: ' + e.message + ' | Raw: ' + result.content.slice(0,200));
+  }
+
+  research.raw_sources = results;
+  research.researched_at = new Date().toISOString();
+  research.provider = result.provider;
+
+  var realUrls = (research.sources || []).filter(function(s) {
+    return s.url && s.url.startsWith('http') && s.url.indexOf('example.com') === -1;
+  });
+  if (!realUrls.length) throw new Error('No real URLs in research — possible fabrication');
+
+  fs.writeFileSync(DRAFTS + '/research.json', JSON.stringify(research, null, 2));
+  log('[P1] Done — ' + realUrls.length + ' real URLs via ' + result.provider);
+
+  var points = research.key_points.slice(0,3).map(function(p) { return '• ' + p; }).join('\n');
+  await send('✅ *Phase 1 complete*\n📌 Angle: _' + research.angle + '_\n🔗 Sources: ' + realUrls.length + ' real URLs\n🤖 Provider: ' + result.provider + '\n\nKey points:\n' + points);
+
+  return research;
+}
+
+// ── TELEGRAM HELPERS ─────────────────────────────────────────────────────────
+function tgRequest(method, payload) {
+  return new Promise(function(resolve, reject) {
+    var body = JSON.stringify(payload);
+    var req = https.request({
+      hostname: 'api.telegram.org',
+      path: '/bot' + TG_TOKEN + '/' + method,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    }, function(res) {
+      var data = '';
+      res.on('data', function(c) { data += c; });
+      res.on('end', function() { try { resolve(JSON.parse(data)); } catch(e) { resolve({}); } });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function send(text) {
+  var chunks = [];
+  for (var i = 0; i < text.length; i += 4000) chunks.push(text.slice(i, i+4000));
+  return chunks.reduce(function(p, c) {
+    return p.then(function() { return tgRequest('sendMessage', { chat_id: TG_CHAT, text: c, parse_mode: 'Markdown' }); });
+  }, Promise.resolve());
+}
+
+async function getUpdates() {
+  var res = await tgRequest('getUpdates', { offset: offset, timeout: 30, allowed_updates: ['message'] });
+  if (!res.ok || !res.result || !res.result.length) return [];
+  offset = res.result[res.result.length - 1].update_id + 1;
+  return res.result;
+}
+
+// ── SYSTEM HELPERS ───────────────────────────────────────────────────────────
+function getRam() {
+  try {
+    var b = parseInt(execSync('grep "^anon " /sys/fs/cgroup/memory.stat').toString().split(/\s+/)[1]);
+    return (b/1024/1024).toFixed(0) + ' MB';
+  } catch(e) { return 'unknown'; }
+}
+
+function getDisk() {
+  try {
+    var o = execSync('df /root --output=used,avail').toString().trim().split('\n')[1].trim().split(/\s+/);
+    return (parseInt(o[0])/1024).toFixed(0) + 'MB used / ' + (parseInt(o[1])/1024).toFixed(0) + 'MB free';
+  } catch(e) { return 'unknown'; }
+}
+
+function getLastRun() {
+  try {
+    var r = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8'));
+    if (!r.length) return 'No runs yet';
+    var l = r[r.length-1];
+    return (l.keyword || '?') + ' — ' + (l.status || '?') + ' — ' + (l.timestamp || '').slice(0,16);
+  } catch(e) { return 'No runs yet'; }
+}
+
+function writeRunLog(entry) {
+  try {
+    var runs = [];
+    try { runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8')); } catch(e) {}
+    runs.push(Object.assign({}, entry, { timestamp: new Date().toISOString() }));
+    fs.writeFileSync(RUNS_LOG, JSON.stringify(runs, null, 2));
+  } catch(e) { log('[runLog] ' + e.message); }
+}
+
+// ── COMMAND HANDLERS ─────────────────────────────────────────────────────────
+async function handleStatus() {
+  await send('🦞 *BootstrapClaw Status*\n\n*Pipeline:* ' + pipelineStatus + '\n*Keyword:* ' + (currentKeyword || 'none') + '\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Last run:* ' + getLastRun() + '\n\n/run [keyword] — start pipeline\n/status — this message\n/health — system check\n/logs — last 5 runs');
+}
+
+async function handleHealth() {
+  await send('🩺 *Health Check*\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Pipeline:* ' + pipelineStatus + '\n*Providers:* SambaNova ✅ Cerebras ✅ Ollama ✅ Groq ✅');
+}
+
+async function handleLogs() {
+  try {
+    var runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8'));
+    if (!runs.length) { await send('No runs logged yet.'); return; }
+    var lines = runs.slice(-5).reverse().map(function(r) {
+      return '• ' + (r.timestamp || '').slice(0,16) + ' | ' + r.keyword + ' | ' + r.status;
+    }).join('\n');
+    await send('📋 *Last runs:*\n' + lines);
+  } catch(e) { await send('Could not read runs.log'); }
+}
+
+async function handleRun(keyword) {
+  if (pipelineStatus === 'running') { await send('⚠️ Pipeline already running. Use /status to check.'); return; }
+  if (!keyword) {
+    try {
+      var ideas = fs.readFileSync(IDEAS, 'utf8').trim().split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); });
+      if (!ideas.length) { await send('No keywords queued. Use /run [keyword]'); return; }
+      keyword = ideas[0].replace(/^[-*]\s*/, '').trim();
+    } catch(e) { await send('Usage: /run [keyword]'); return; }
+  }
+  pipelineStatus = 'running';
+  currentKeyword = keyword;
+  runPipeline(keyword).catch(function(err) {
+    log('[pipeline] Fatal: ' + err.message);
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+    send('❌ *Pipeline failed*\n' + err.message).catch(function(){});
+    writeRunLog({ keyword: keyword, status: 'failed', error: err.message });
+  });
+}
+
+// ── PIPELINE ORCHESTRATOR ────────────────────────────────────────────────────
+async function runPipeline(keyword) {
+  log('[pipeline] Start: ' + keyword);
+  await send('🚀 *Pipeline started*\nKeyword: _' + keyword + '_');
+  try {
+    var research = await runResearcher(keyword);
+    await send('⏳ *Phase 2 (Writer) coming next*\nresearch.json written ✅');
+    writeRunLog({ keyword: keyword, status: 'phase1_complete', angle: research.angle });
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+  } catch(err) {
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+    writeRunLog({ keyword: keyword, status: 'failed', error: err.message });
+    throw err;
+  }
+}
+
+// ── DISPATCH ─────────────────────────────────────────────────────────────────
+async function dispatch(text) {
+  var t = text.trim();
+  if (t === '/status')         return handleStatus();
+  if (t === '/health')         return handleHealth();
+  if (t === '/logs')           return handleLogs();
+  if (t.startsWith('/run'))    return handleRun(t.replace('/run', '').trim());
+  if (t === '/restart')        { await send('♻️ Restarting...'); process.exit(0); }
+  await send('Unknown command: ' + t + '\nType /status for help.');
+}
+
+// ── POLL LOOP ────────────────────────────────────────────────────────────────
+async function poll() {
+  while (true) {
+    try {
+      var updates = await getUpdates();
+      for (var i = 0; i < updates.length; i++) {
+        var msg = updates[i].message;
+        if (!msg || !msg.text) continue;
+        if (String(msg.chat.id) !== TG_CHAT) continue;
+        log('CMD: ' + msg.text);
+        dispatch(msg.text).catch(function(err) {
+          log('Dispatch error: ' + err.message);
+          send('❌ ' + err.message).catch(function(){});
+        });
+      }
+    } catch(err) {
+      log('Poll error: ' + err.message);
+      await new Promise(function(r) { setTimeout(r, 5000); });
+    }
+  }
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────────────
+log('BootstrapClaw starting...');
+fs.mkdirSync(DRAFTS, { recursive: true });
+send('🦞 *BootstrapClaw v2 online.*\nType /run [keyword] to start or /status to check.').catch(console.error);
+poll();
