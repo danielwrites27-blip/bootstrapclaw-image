@@ -302,6 +302,82 @@ async function runWriter(research) {
   return article;
 }
 
+// ── PHASE 3: REPORTER / PUBLISHER ────────────────────────────────────────────
+async function runReporter(article) {
+  log('[P3] Publishing: ' + article.title);
+  await send('📤 *Phase 3 — Publishing*\nTitle: _' + article.title + '_');
+
+  // Step 1: Get cover image from Pexels
+  var coverUrl = null;
+  try {
+    var pexelsKey = process.env.PEXELS_API_KEY;
+    if (pexelsKey) {
+      var searchTerm = encodeURIComponent(article.keyword || 'students studying');
+      var pexelsRes = await new Promise(function(resolve, reject) {
+        var req = https.request({
+          hostname: 'api.pexels.com',
+          path: '/v1/search?query=' + searchTerm + '&per_page=1&orientation=landscape',
+          method: 'GET',
+          headers: { Authorization: pexelsKey }
+        }, function(res) {
+          var d = '';
+          res.on('data', function(c) { d += c; });
+          res.on('end', function() { try { resolve(JSON.parse(d)); } catch(e) { resolve({}); } });
+        });
+        req.on('error', reject);
+        req.end();
+      });
+      if (pexelsRes.photos && pexelsRes.photos.length) {
+        coverUrl = pexelsRes.photos[0].src.large2x;
+        log('[P3] Cover image: ' + coverUrl);
+      }
+    }
+  } catch(e) {
+    log('[P3] Pexels failed: ' + e.message + ' — continuing without cover');
+  }
+
+  // Step 2: Build body with cover image embedded as first line
+  var body = article.body_markdown;
+  if (coverUrl) {
+    body = '![Cover](' + coverUrl + ')\n\n' + body;
+  }
+
+  // Step 3: Publish to Dev.to
+  var devtoKey = process.env.DEVTO_API_KEY;
+  if (!devtoKey) throw new Error('DEVTO_API_KEY not set');
+
+  var payload = {
+    article: {
+      title: article.title,
+      body_markdown: body,
+      published: true,
+      tags: article.tags || [],
+      description: article.description || ''
+    }
+  };
+
+  var devtoRes = await httpPost('https://dev.to/api/articles',
+    { 'api-key': devtoKey, 'Content-Type': 'application/json' },
+    payload
+  );
+
+  if (!devtoRes.url) {
+    throw new Error('Dev.to publish failed: ' + JSON.stringify(devtoRes).slice(0,200));
+  }
+
+  var articleUrl = devtoRes.url;
+  log('[P3] Published: ' + articleUrl);
+
+  // Step 4: Save URL back to article.json
+  article.devto_url = articleUrl;
+  article.published_at = new Date().toISOString();
+  fs.writeFileSync(DRAFTS + '/article.json', JSON.stringify(article, null, 2));
+
+  await send('🎉 *Published!*\n\n📰 ' + article.title + '\n\n🔗 ' + articleUrl + '\n\n📊 ' + article.word_count + ' words | ' + (article.tags || []).join(', '));
+
+  return articleUrl;
+}
+
 // ── PIPELINE ORCHESTRATOR ────────────────────────────────────────────────────
 async function runPipeline(keyword) {
   log('[pipeline] Start: ' + keyword);
@@ -309,8 +385,8 @@ async function runPipeline(keyword) {
   try {
     var research = await runResearcher(keyword);
     var article = await runWriter(research);
-    await send('⏳ *Phase 3 (Publisher) coming next*\narticle.json written ✅');
-    writeRunLog({ keyword: keyword, status: 'phase2_complete', title: article.title, words: article.word_count });
+    var url = await runReporter(article);
+    writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url });
     pipelineStatus = 'idle';
     currentKeyword = null;
   } catch(err) {
