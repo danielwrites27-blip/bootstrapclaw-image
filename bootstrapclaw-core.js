@@ -264,14 +264,53 @@ async function handleRun(keyword) {
   });
 }
 
+// ── PHASE 2: WRITER ──────────────────────────────────────────────────────────
+async function runWriter(research) {
+  log('[P2] Writing article for: ' + research.keyword);
+  await send('✍️ *Phase 2 — Writing*\nAngle: _' + research.angle + '_');
+
+  var sys = 'You are an expert content writer. Write a high-quality, engaging article based on the research provided.\nRules:\n- Minimum 900 words\n- Start with a specific statistic or named study — never an emotional statement\n- Use short paragraphs (2-3 sentences max)\n- No em dashes anywhere\n- No phrases like: by leveraging, in conclusion, game-changer, dive into, what matters most\n- Include inline links using markdown: [anchor text](url)\n- Output ONLY valid JSON — no markdown fences, no explanation';
+
+  var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
+
+  var result = await callLLM('writer', sys, usr);
+
+  var article;
+  try {
+    var cleaned = result.content.replace(/```json/g,'').replace(/```/g,'').trim();
+    article = JSON.parse(cleaned);
+  } catch(e) {
+    throw new Error('Bad JSON from writer: ' + e.message + ' | Raw: ' + result.content.slice(0,200));
+  }
+
+  if (!article.title) throw new Error('Writer returned no title');
+  if (!article.body_markdown) throw new Error('Writer returned no body');
+
+  var wordCount = article.body_markdown.split(/\s+/).length;
+  if (wordCount < 800) throw new Error('Article too short: ' + wordCount + ' words (minimum 800)');
+
+  article.keyword = research.keyword;
+  article.written_at = new Date().toISOString();
+  article.provider = result.provider;
+  article.word_count = wordCount;
+
+  fs.writeFileSync(DRAFTS + '/article.json', JSON.stringify(article, null, 2));
+  log('[P2] Done — ' + wordCount + ' words via ' + result.provider);
+
+  await send('✅ *Phase 2 complete*\n📝 Title: _' + article.title + '_\n📊 Words: ' + wordCount + '\n🤖 Provider: ' + result.provider + '\n\n⏳ Phase 3 (Publisher) coming next');
+
+  return article;
+}
+
 // ── PIPELINE ORCHESTRATOR ────────────────────────────────────────────────────
 async function runPipeline(keyword) {
   log('[pipeline] Start: ' + keyword);
   await send('🚀 *Pipeline started*\nKeyword: _' + keyword + '_');
   try {
     var research = await runResearcher(keyword);
-    await send('⏳ *Phase 2 (Writer) coming next*\nresearch.json written ✅');
-    writeRunLog({ keyword: keyword, status: 'phase1_complete', angle: research.angle });
+    var article = await runWriter(research);
+    await send('⏳ *Phase 3 (Publisher) coming next*\narticle.json written ✅');
+    writeRunLog({ keyword: keyword, status: 'phase2_complete', title: article.title, words: article.word_count });
     pipelineStatus = 'idle';
     currentKeyword = null;
   } catch(err) {
