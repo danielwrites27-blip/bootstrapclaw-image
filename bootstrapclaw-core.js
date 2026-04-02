@@ -351,30 +351,33 @@ async function runReporter(article) {
     body = '![Cover](' + coverUrl + ')\n\n' + body;
   }
 
-  // Step 3: Publish to Dev.to
-  var devtoKey = process.env.DEVTO_API_KEY;
-  if (!devtoKey) throw new Error('DEVTO_API_KEY not set');
-
-  var payload = {
-    article: {
-      title: article.title,
-      body_markdown: body,
-      published: true,
-      tags: article.tags || [],
-      description: article.description || ''
-    }
-  };
-
-  var devtoRes = await httpPost('https://dev.to/api/articles',
-    { 'api-key': devtoKey, 'Content-Type': 'application/json' },
-    payload
-  );
-
-  if (!devtoRes.url) {
-    throw new Error('Dev.to publish failed: ' + JSON.stringify(devtoRes).slice(0,200));
+  // Step 3: Publish to Dev.to via devto-publish.js
+  article.body_markdown = body;
+  // Sanitize tags: Dev.to requires single-word alphanumeric tags, max 4 tags
+  if (article.tags) {
+    article.tags = article.tags
+      .map(t => t.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      .filter(t => t.length > 0)
+      .slice(0, 4);
   }
-
-  var articleUrl = devtoRes.url;
+  var tmpPath = DRAFTS + '/article-publish.json';
+  fs.writeFileSync(tmpPath, JSON.stringify(article, null, 2));
+  var { execSync } = require('child_process');
+  var articleUrl;
+  try {
+    var publishOut = execSync(
+      'node /root/bootstrapclaw/scripts/devto-publish.js ' + tmpPath,
+      { encoding: 'utf8', timeout: 30000, env: process.env }
+    ).trim();
+    var urlMatch = publishOut.match(/SUCCESS: (https:\/\/[^\s]+)/);
+    if (!urlMatch) {
+      throw new Error('Unexpected output: ' + publishOut.slice(0,200));
+    }
+    articleUrl = urlMatch[1];
+    log('[P3] devto-publish.js output: ' + publishOut);
+  } catch(e) {
+    throw new Error('Dev.to publish failed: ' + e.message);
+  }
   log('[P3] Published: ' + articleUrl);
 
   // Step 4: Save URL back to article.json
