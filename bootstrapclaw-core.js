@@ -314,6 +314,67 @@ async function runWriter(research) {
 }
 
 // ── PHASE 3: REPORTER / PUBLISHER ────────────────────────────────────────────
+async function runHumanizer(article) {
+  log('[P2.5] Humanizing article...');
+  var sys = `You are a writing editor. Remove all signs of AI-generated writing from the article body provided, using this process:
+
+PASS 1 — Rewrite fixing these patterns:
+1. Significance inflation: remove "pivotal moment", "testament to", "evolving landscape", "underscores", "highlights", "marks a shift", "setting the stage"
+2. Promotional language: remove "nestled", "vibrant", "groundbreaking", "breathtaking", "renowned", "boasts", "showcasing"
+3. Vague attributions: replace "experts believe", "industry observers", "some critics argue" with specific named sources or remove
+4. Superficial -ing phrases: remove trailing "symbolizing...", "reflecting...", "contributing to...", "fostering...", "showcasing..."
+5. Em dashes: replace all — with commas or periods
+6. Rule of three: break up forced "X, Y, and Z" groupings where they feel assembled
+7. Copula avoidance: replace "serves as", "stands as", "functions as" with "is" or "are"
+8. Negative parallelisms: remove "It's not just X, it's Y" constructions
+9. AI vocabulary: remove "additionally", "crucial", "delve", "intricate", "tapestry", "testament", "underscore", "vibrant", "pivotal", "foster"
+10. Boldface overuse: remove **bold** from mid-sentence emphasis, keep only if essential
+11. Filler phrases: "in order to" → "to", "due to the fact that" → "because", "it is important to note that" → remove
+12. Excessive hedging: "could potentially possibly" → "may"
+13. Generic conclusions: replace "the future looks bright", "exciting times ahead" with a specific fact or plan
+14. Inline-header lists: convert "**Label:** description" bullet lists into prose
+15. Hyphenated pairs: remove hyphens from "data-driven", "cross-functional", "client-facing", "high-quality", "decision-making", "real-time", "long-term"
+
+PASS 2 — Self-audit:
+Ask yourself: "What still makes this obviously AI-generated?" Fix any remaining tells.
+
+SOUL CHECK:
+- Vary sentence length. Short punchy sentences work. Longer ones that take their time are fine too.
+- Use specific numbers and named sources over vague claims
+- One opinion or reaction is allowed — "This is worth paying attention to" beats pure neutral reporting
+- Read it aloud mentally. If it sounds like a press release, rewrite that paragraph.
+
+RULES:
+- Keep ALL inline markdown links exactly as they appear in the original
+- Keep word count at 900+ words
+- Do NOT add new facts that were not in the original
+- Output ONLY valid JSON with one field, no markdown fences, no explanation
+
+Output format:
+{"body_markdown": "full humanized article in markdown"}`;
+
+  var usr = 'Humanize this article body. Return only the JSON object.\n\n' + article.body_markdown;
+
+  var result = await callLLM('reporter', sys, usr);
+  var parsed;
+  try {
+    var clean = result.content.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
+    parsed = JSON.parse(clean);
+  } catch(e) {
+    log('[P2.5] JSON parse failed, using original body: ' + e.message);
+    return article;
+  }
+  if (!parsed.body_markdown) {
+    log('[P2.5] No body_markdown in response, using original');
+    return article;
+  }
+  parsed.body_markdown = parsed.body_markdown.replace(/—/g, ' - ');
+  var wordCount = parsed.body_markdown.split(/\s+/).filter(Boolean).length;
+  log('[P2.5] Humanized: ' + wordCount + ' words, provider: ' + result.provider);
+  article.body_markdown = parsed.body_markdown;
+  article.word_count = wordCount;
+  return article;
+}
 async function runReporter(article) {
   log('[P3] Publishing: ' + article.title);
   await send('📤 *Phase 3 — Publishing*\nTitle: _' + article.title + '_');
@@ -416,6 +477,9 @@ async function runPipeline(keyword) {
   try {
     var research = await runResearcher(keyword);
     var article = await runWriter(research);
+    await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
+    article = await runHumanizer(article);
+    await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
     var url = await runReporter(article);
     var validation = runValidator(research, article, url);
     if (validation.failed.length > 0) {
