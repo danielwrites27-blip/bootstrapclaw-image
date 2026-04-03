@@ -111,6 +111,11 @@ if (fs.existsSync(articlePath)) {
       fail('article.json contains banned phrases');
     else
       pass('No banned phrases in article.json');
+
+    if (/—/.test(body))
+      fail('article.json contains em dashes (—)');
+    else
+      pass('No em dashes in article.json');
   }
 } else {
   pass('article.json not present — skipping draft checks (pre-run is fine)');
