@@ -36,7 +36,7 @@ if (/groq.*70b|70b.*groq/i.test(core)) fail('Banned model: groq 70b (retired, to
 else                                    pass('No groq-70b references');
 
 // Researcher prompt must reference tavily and research.json
-var researcherBlock = core.match(/runResearcher[\s\S]{0,3000}?runWriter/);
+var researcherBlock = core.match(/runResearcher[\s\S]{0,10000}?runWriter/);
 if (researcherBlock) {
   var rb = researcherBlock[0];
   if (!/tavily/i.test(rb))       fail('Researcher prompt missing "tavily" reference');
@@ -48,7 +48,7 @@ if (researcherBlock) {
 }
 
 // Writer prompt must reference 800/900, published:true, body_markdown
-var writerBlock = core.match(/runWriter[\s\S]{0,4000}?runReporter/);
+var writerBlock = core.match(/runWriter[\s\S]{0,10000}?runReporter/);
 if (writerBlock) {
   var wb = writerBlock[0];
   if (!/[89]00/.test(wb))           fail('Writer prompt missing word count (800 or 900)');
@@ -60,7 +60,7 @@ if (writerBlock) {
 }
 
 // Reporter must reference devto-publish.js
-var reporterBlock = core.match(/runReporter[\s\S]{0,3000}?runPipeline/);
+var reporterBlock = core.match(/runReporter[\s\S]{0,10000}?runPipeline/);
 if (reporterBlock) {
   if (!/devto-publish\.js/.test(reporterBlock[0])) fail('Reporter missing devto-publish.js reference');
   else                                               pass('Reporter references devto-publish.js');
