@@ -198,14 +198,14 @@ async function getUpdates() {
 // ── SYSTEM HELPERS ───────────────────────────────────────────────────────────
 function getRam() {
   try {
-    var b = parseInt(execSync('grep "^anon " /sys/fs/cgroup/memory.stat').toString().split(/\s+/)[1]);
+    var b = parseInt(execSync('cat /sys/fs/cgroup/memory.current').toString().trim());
     return (b/1024/1024).toFixed(0) + ' MB';
   } catch(e) { return 'unknown'; }
 }
 
 function getDisk() {
   try {
-    var o = execSync('df /root --output=used,avail').toString().trim().split('\n')[1].trim().split(/\s+/);
+    var o = execSync('df /root/.openclaw --output=used,avail').toString().trim().split('\n')[1].trim().split(/\s+/);
     return (parseInt(o[0])/1024).toFixed(0) + 'MB used / ' + (parseInt(o[1])/1024).toFixed(0) + 'MB free';
   } catch(e) { return 'unknown'; }
 }
@@ -391,6 +391,22 @@ async function runReporter(article) {
 }
 
 // ── PIPELINE ORCHESTRATOR ────────────────────────────────────────────────────
+function runValidator(research, article, devtoUrl) {
+  var checks = {
+    research_has_real_urls: (research.sources||[]).every(function(s) {
+      return s.url && s.url.startsWith('http') && !s.url.includes('example.com');
+    }),
+    article_word_count: (article.word_count || 0) >= 800,
+    article_valid_json: true,
+    no_placeholder_text: !/(Article title here|continues\.\.\.|truncated|\[INSERT)/.test(article.body_markdown||''),
+    devto_url_real: !!(devtoUrl && devtoUrl.includes('dev.to/daniel_writes_27/') && !devtoUrl.includes('example.com')),
+    no_banned_phrases: !/(by leveraging|in conclusion|what matters most|dive into|game-changer)/.test(article.body_markdown||'')
+  };
+  var passed = Object.values(checks).filter(Boolean).length;
+  var failed = Object.keys(checks).filter(function(k) { return !checks[k]; });
+  return { passed: passed, total: 6, failed: failed, checks: checks };
+}
+
 async function runPipeline(keyword) {
   log('[pipeline] Start: ' + keyword);
   await send('🚀 *Pipeline started*\nKeyword: _' + keyword + '_');
@@ -398,7 +414,13 @@ async function runPipeline(keyword) {
     var research = await runResearcher(keyword);
     var article = await runWriter(research);
     var url = await runReporter(article);
-    writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url });
+    var validation = runValidator(research, article, url);
+    if (validation.failed.length > 0) {
+      await send('⚠️ *Validator: ' + validation.passed + '/6 checks passed*\nFailed: ' + validation.failed.join(', '));
+    } else {
+      await send('✅ *Validator: 6/6 checks passed*');
+    }
+    writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
     pipelineStatus = 'idle';
     currentKeyword = null;
   } catch(err) {
