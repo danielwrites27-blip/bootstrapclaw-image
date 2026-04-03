@@ -371,8 +371,8 @@ Output format:
   parsed.body_markdown = parsed.body_markdown.replace(/—/g, ' - ');
   var wordCount = parsed.body_markdown.split(/\s+/).filter(Boolean).length;
   log('[P2.5] Humanized: ' + wordCount + ' words, provider: ' + result.provider);
-  article.body_markdown = parsed.body_markdown;
-  article.word_count = wordCount;
+  article.body_markdown = parsed.body_markdown.replace(/\s*\[\d+\]/g, '');
+  article.word_count = article.body_markdown.split(/\s+/).filter(Boolean).length;
   return article;
 }
 async function runReporter(article) {
@@ -468,7 +468,7 @@ function runValidator(research, article, devtoUrl) {
   };
   var passed = Object.values(checks).filter(Boolean).length;
   var failed = Object.keys(checks).filter(function(k) { return !checks[k]; });
-  return { passed: passed, total: 6, failed: failed, checks: checks };
+  return { passed: passed, total: 7, failed: failed, checks: checks };
 }
 
 async function runPipeline(keyword) {
@@ -483,9 +483,9 @@ async function runPipeline(keyword) {
     var url = await runReporter(article);
     var validation = runValidator(research, article, url);
     if (validation.failed.length > 0) {
-      await send('⚠️ *Validator: ' + validation.passed + '/6 checks passed*\nFailed: ' + validation.failed.join(', '));
+      await send('⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', '));
     } else {
-      await send('✅ *Validator: 6/6 checks passed*');
+      await send('✅ *Validator: 7/7 checks passed*');
     }
     writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
     pipelineStatus = 'idle';
@@ -536,6 +536,29 @@ log('BootstrapClaw starting...');
 fs.mkdirSync(DRAFTS, { recursive: true });
 send('🦞 *BootstrapClaw v2 online.*\nType /run [keyword] to start or /status to check.').catch(console.error);
 
+// ── PATTERN ANALYSER ─────────────────────────────────────────────────────────
+function analysePatterns() {
+  var runs = [];
+  try { runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8')); } catch(e) { return null; }
+  var cutoff = Date.now() - 28 * 24 * 60 * 60 * 1000;
+  var recent = runs.filter(function(r) { return new Date(r.timestamp||0).getTime() > cutoff; });
+  var failures = recent.filter(function(r) { return r.status !== 'published'; });
+  var failMap = {};
+  failures.forEach(function(r) {
+    var key = (r.error || 'unknown error').slice(0, 60);
+    failMap[key] = (failMap[key] || 0) + 1;
+  });
+  var patterns = Object.entries(failMap)
+    .filter(function(e) { return e[1] >= 3; })
+    .map(function(e) { return e[1] + 'x: ' + e[0]; });
+  return {
+    total: recent.length,
+    published: recent.filter(function(r) { return r.status === 'published'; }).length,
+    failures: failures.length,
+    patterns: patterns
+  };
+}
+
 // ── DAILY REPORT ─────────────────────────────────────────────────────────────
 var lastReportDate = '';
 setInterval(function() {
@@ -543,6 +566,21 @@ setInterval(function() {
   var h = now.getUTCHours();
   var m = now.getUTCMinutes();
   var today = now.toISOString().slice(0, 10);
+  // Sunday Pattern Analyser — 09:00 UTC
+  var day = now.getUTCDay(); // 0 = Sunday
+  if (h === 9 && m === 0 && day === 0) {
+    var pa = analysePatterns();
+    if (pa) {
+      var patMsg = pa.patterns.length > 0
+        ? '*Patterns (3+ repeats):*\n' + pa.patterns.join('\n')
+        : '✅ No recurring failure patterns.';
+      send(
+        '🔍 *Weekly Pattern Report*\n\n' +
+        '*Last 28 days:* ' + pa.total + ' runs, ' + pa.published + ' published, ' + pa.failures + ' failed\n\n' +
+        patMsg
+      ).catch(console.error);
+    }
+  }
   if (h === 9 && m === 0 && today !== lastReportDate) {
     lastReportDate = today;
     var runs = [];
