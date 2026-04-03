@@ -468,4 +468,31 @@ async function poll() {
 log('BootstrapClaw starting...');
 fs.mkdirSync(DRAFTS, { recursive: true });
 send('🦞 *BootstrapClaw v2 online.*\nType /run [keyword] to start or /status to check.').catch(console.error);
+
+// ── DAILY REPORT ─────────────────────────────────────────────────────────────
+var lastReportDate = '';
+setInterval(function() {
+  var now = new Date();
+  var h = now.getUTCHours();
+  var m = now.getUTCMinutes();
+  var today = now.toISOString().slice(0, 10);
+  if (h === 9 && m === 0 && today !== lastReportDate) {
+    lastReportDate = today;
+    var runs = [];
+    try { runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8')); } catch(e) {}
+    var todayRuns = runs.filter(function(r) { return (r.timestamp||'').slice(0,10) === today; });
+    var published = todayRuns.filter(function(r) { return r.status === 'published'; }).length;
+    var failed = todayRuns.filter(function(r) { return r.status === 'failed'; }).length;
+    var total = runs.length;
+    var last = runs.length ? runs[runs.length-1] : null;
+    var lastLine = last ? ('_' + last.title + '_\n' + last.url) : 'No runs yet';
+    send(
+      '🦞 *Daily Report — ' + today + '*\n\n' +
+      '*Today:* ' + published + ' published, ' + failed + ' failed\n' +
+      '*Total articles:* ' + total + '\n' +
+      '*RAM:* ' + getRam() + ' | *Disk:* ' + getDisk() + '\n\n' +
+      '*Last published:*\n' + lastLine
+    ).catch(console.error);
+  }
+}, 60 * 1000);
 poll();
