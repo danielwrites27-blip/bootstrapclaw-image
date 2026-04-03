@@ -295,6 +295,8 @@ async function runWriter(research) {
   if (!article.title) throw new Error('Writer returned no title');
   if (!article.body_markdown) throw new Error('Writer returned no body');
 
+  article.body_markdown = article.body_markdown.replace(/—/g, ' - ');
+
   var wordCount = article.body_markdown.split(/\s+/).length;
   if (wordCount < 800) throw new Error('Article too short: ' + wordCount + ' words (minimum 800)');
 
@@ -400,7 +402,8 @@ function runValidator(research, article, devtoUrl) {
     article_valid_json: true,
     no_placeholder_text: !/(Article title here|continues\.\.\.|truncated|\[INSERT)/.test(article.body_markdown||''),
     devto_url_real: !!(devtoUrl && devtoUrl.includes('dev.to/daniel_writes_27/') && !devtoUrl.includes('example.com')),
-    no_banned_phrases: !/(by leveraging|in conclusion|what matters most|dive into|game-changer)/.test(article.body_markdown||'')
+    no_banned_phrases: !/(by leveraging|in conclusion|what matters most|dive into|game-changer)/.test(article.body_markdown||''),
+    no_em_dashes: !/—/.test(article.body_markdown||'')
   };
   var passed = Object.values(checks).filter(Boolean).length;
   var failed = Object.keys(checks).filter(function(k) { return !checks[k]; });
