@@ -14,6 +14,12 @@ rm -f /root/bootstrapclaw/data/drafts/research.json
 rm -f /root/bootstrapclaw/data/drafts/article.json
 rm -f /root/bootstrapclaw/data/drafts/article-publish.json
 
+# Pull latest code from GitHub
+echo "[startup] Pulling latest bootstrapclaw-core.js from GitHub..."
+curl -s -o /root/bootstrapclaw/bootstrapclaw-core.js \
+  https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/bootstrapclaw-core.js \
+  && echo "[startup] Pull OK" || echo "[startup] Pull failed, using cached version"
+
 # Start
 node /root/bootstrapclaw/bootstrapclaw-core.js >> /root/bootstrapclaw/data/core.log 2>&1 &
 echo "[startup] Started PID: $!"
