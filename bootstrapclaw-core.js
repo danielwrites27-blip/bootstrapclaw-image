@@ -154,6 +154,7 @@ async function runResearcher(keyword) {
 
   fs.writeFileSync(DRAFTS + '/research.json', JSON.stringify(research, null, 2));
   log('[P1] Done — ' + realUrls.length + ' real URLs via ' + result.provider);
+  research.provider = result.provider;
 
   var points = research.key_points.slice(0,3).map(function(p) { return '• ' + p; }).join('\n');
   await send('✅ *Phase 1 complete*\n📌 Angle: _' + research.angle + '_\n🔗 Sources: ' + realUrls.length + ' real URLs\n🤖 Provider: ' + result.provider + '\n\nKey points:\n' + points);
@@ -371,6 +372,7 @@ async function runWriter(research) {
 
   fs.writeFileSync(DRAFTS + '/article.json', JSON.stringify(article, null, 2));
   log('[P2] Done — ' + wordCount + ' words via ' + result.provider);
+  article.provider = result.provider;
 
   await send('✅ *Phase 2 complete*\n📝 Title: _' + article.title + '_\n📊 Words: ' + wordCount + '\n🤖 Provider: ' + result.provider + '\n\n⏳ Phase 3 (Publisher) coming next');
 
@@ -442,6 +444,7 @@ RULES:
   parsed.body_markdown = parsed.body_markdown.replace(/—/g, ' - ');
   var wordCount = parsed.body_markdown.split(/\s+/).filter(Boolean).length;
   log('[P2.5] Humanized: ' + wordCount + ' words, provider: ' + result.provider);
+  article.humanizer_provider = result.provider;
   var humanizedBody = parsed.body_markdown.replace(/\s*\[\d+\]/g, '');
   var humanizedCount = humanizedBody.split(/\s+/).filter(Boolean).length;
   if (humanizedCount < 850) {
@@ -549,6 +552,7 @@ function runValidator(research, article, devtoUrl) {
 }
 
 async function runPipeline(keyword) {
+  var pipelineStart = Date.now();
   log('[pipeline] Start: ' + keyword);
   await send('🚀 *Pipeline started*\nKeyword: _' + keyword + '_');
   try {
@@ -559,11 +563,11 @@ async function runPipeline(keyword) {
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
     var url = await runReporter(article);
     var validation = runValidator(research, article, url);
-    if (validation.failed.length > 0) {
-      await send('⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', '));
-    } else {
-      await send('✅ *Validator: 7/7 checks passed*');
-    }
+    var elapsed = Math.round((Date.now() - pipelineStart) / 1000);
+    var validatorMsg = validation.failed.length > 0
+      ? '⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', ')
+      : '✅ *Validator: 7/7 checks passed*';
+    await send(validatorMsg + '\n\n📊 *Run Summary*\n⏱️ ' + elapsed + 's total\nP1: ' + (research.provider||'?') + '\nP2: ' + (article.provider||'?') + '\nP2.5: ' + (article.humanizer_provider||'groq_kimi') + '\nWords: ' + article.word_count);
     markTopicUsed(keyword);
     writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
     pipelineStatus = 'idle';
