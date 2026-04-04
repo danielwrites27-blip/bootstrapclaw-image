@@ -12,6 +12,7 @@ const BASE_DIR = '/root/bootstrapclaw';
 const DRAFTS   = BASE_DIR + '/data/drafts';
 const RUNS_LOG = BASE_DIR + '/data/runs.log';
 const IDEAS    = BASE_DIR + '/data/article-ideas.md';
+const USED     = BASE_DIR + '/data/used-topics.txt';
 
 if (!TG_TOKEN) { console.error('TELEGRAM_BOT_TOKEN not set'); process.exit(1); }
 
@@ -248,14 +249,76 @@ async function handleLogs() {
   } catch(e) { await send('Could not read runs.log'); }
 }
 
+
+// ── TOPIC DEDUPLICATION ───────────────────────────────────────────────────────
+function significantWords(str) {
+  var stop = ['a','an','the','and','or','for','to','of','in','on','how','with','your','is','are','be','as','at','by'];
+  return str.toLowerCase().replace(/[^a-z0-9 ]/g,'').split(/\s+/).filter(function(w) {
+    return w.length > 2 && stop.indexOf(w) === -1;
+  });
+}
+
+function isTopicUsed(keyword) {
+  // Check 1: exact match in used-topics.txt
+  try {
+    var used = fs.readFileSync(USED, 'utf8').toLowerCase();
+    if (used.split('\n').some(function(l) { return l.trim() === keyword.toLowerCase(); })) {
+      return { used: true, reason: 'exact match in used-topics' };
+    }
+  } catch(e) {}
+
+  // Check 2: semantic overlap (40%+) against past article titles
+  try {
+    var runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8'));
+    var kwWords = significantWords(keyword);
+    for (var i = 0; i < runs.length; i++) {
+      if (!runs[i].title) continue;
+      var titleWords = significantWords(runs[i].title);
+      var overlap = kwWords.filter(function(w) { return titleWords.indexOf(w) !== -1; });
+      var score = overlap.length / Math.max(kwWords.length, 1);
+      if (score >= 0.4) {
+        return { used: true, reason: 'too similar to: ' + runs[i].title + ' (' + Math.round(score*100) + '% overlap)' };
+      }
+    }
+  } catch(e) {}
+
+  return { used: false };
+}
+
+function markTopicUsed(keyword) {
+  // Write to used-topics.txt
+  fs.appendFileSync(USED, keyword.toLowerCase() + '\n');
+  // Remove from article-ideas.md
+  try {
+    var lines = fs.readFileSync(IDEAS, 'utf8').split('\n');
+    var filtered = lines.filter(function(l) {
+      return l.replace(/^[-*]\s*/, '').trim().toLowerCase() !== keyword.toLowerCase();
+    });
+    fs.writeFileSync(IDEAS, filtered.join('\n'));
+  } catch(e) {}
+}
+
 async function handleRun(keyword) {
   if (pipelineStatus === 'running') { await send('⚠️ Pipeline already running. Use /status to check.'); return; }
   if (!keyword) {
     try {
       var ideas = fs.readFileSync(IDEAS, 'utf8').trim().split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); });
-      if (!ideas.length) { await send('No keywords queued. Use /run [keyword]'); return; }
-      keyword = ideas[0].replace(/^[-*]\s*/, '').trim();
+      if (!ideas.length) { await send('⚠️ No keywords queued. Add more to article-ideas.md or use /run [keyword]'); return; }
+      keyword = null;
+      for (var i = 0; i < ideas.length; i++) {
+        var candidate = ideas[i].replace(/^[-*]\s*/, '').trim();
+        var check = isTopicUsed(candidate);
+        if (!check.used) { keyword = candidate; break; }
+        log('[dedup] Skipping "' + candidate + '": ' + check.reason);
+      }
+      if (!keyword) { await send('⚠️ All queued keywords already used. Add fresh topics to article-ideas.md'); return; }
     } catch(e) { await send('Usage: /run [keyword]'); return; }
+  } else {
+    var manualCheck = isTopicUsed(keyword);
+    if (manualCheck.used) {
+      await send('⚠️ Topic already covered: ' + manualCheck.reason + '\nUse a different keyword or add /force to override.');
+      return;
+    }
   }
   pipelineStatus = 'running';
   currentKeyword = keyword;
@@ -494,6 +557,7 @@ async function runPipeline(keyword) {
     } else {
       await send('✅ *Validator: 7/7 checks passed*');
     }
+    markTopicUsed(keyword);
     writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
     pipelineStatus = 'idle';
     currentKeyword = null;
