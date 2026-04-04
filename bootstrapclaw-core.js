@@ -568,8 +568,10 @@ async function runPipeline(keyword) {
       ? '⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', ')
       : '✅ *Validator: 7/7 checks passed*';
     await send(validatorMsg);
-    await new Promise(function(r){setTimeout(r,1500)});
-    await send('📊 *Run Summary*\n⏱️ ' + elapsed + 's total\nP1: ' + (research.provider||'?') + '\nP2: ' + (article.provider||'?') + '\nP2.5: ' + (article.humanizer_provider||'groq_kimi') + '\nWords: ' + article.word_count);
+    var p1 = (research.provider||'?').replace(/_/g,'-');
+    var p2 = (article.provider||'?').replace(/_/g,'-');
+    var p25 = (article.humanizer_provider||'groq-kimi').replace(/_/g,'-');
+    await send('📊 *Run Summary*\n' + elapsed + 's total\nP1: ' + p1 + '\nP2: ' + p2 + '\nP2.5: ' + p25 + '\nWords: ' + article.word_count);
     markTopicUsed(keyword);
     writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
     pipelineStatus = 'idle';
