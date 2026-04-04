@@ -39,6 +39,27 @@ var pipelineStatus = 'idle';
 var currentKeyword = null;
 var cerebrasRPD = null;
 
+// ── CEREBRAS RPD CHECK ───────────────────────────────────────────────────────
+async function refreshCerebrasRPD() {
+  try {
+    var key = process.env.CEREBRAS_API_KEY;
+    if (!key) return;
+    var body = '{"model":"qwen-3-235b-a22b-instruct-2507","messages":[{"role":"user","content":"hi"}],"max_tokens":5}';
+    await new Promise(function(resolve) {
+      var req = https.request({
+        hostname: 'api.cerebras.ai', path: '/v1/chat/completions', method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      }, function(r) {
+        var rpd = r.headers['x-ratelimit-remaining-requests-day'];
+        if (rpd) { cerebrasRPD = parseInt(rpd); log('[RPD] Cerebras: ' + cerebrasRPD + ' remaining'); }
+        r.resume(); resolve();
+      });
+      req.on('error', resolve);
+      req.write(body); req.end();
+    });
+  } catch(e) { log('[RPD] Check failed: ' + e.message); }
+}
+
 // ── LOGGING ──────────────────────────────────────────────────────────────────
 function log(msg) {
   console.log('[' + new Date().toISOString() + '] ' + msg);
@@ -692,4 +713,5 @@ setInterval(function() {
     ).catch(console.error);
   }
 }, 60 * 1000);
+refreshCerebrasRPD();
 poll();
