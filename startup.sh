@@ -20,6 +20,10 @@ curl -s -o /root/bootstrapclaw/bootstrapclaw-core.js \
   https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/bootstrapclaw-core.js \
   && echo "[startup] Pull OK" || echo "[startup] Pull failed, using cached version"
 
+# Kill any existing instances before starting
+pkill -f bootstrapclaw-core.js 2>/dev/null
+sleep 2
+
 # Start
 node /root/bootstrapclaw/bootstrapclaw-core.js >> /root/bootstrapclaw/data/core.log 2>&1 &
 echo "[startup] Started PID: $!"
