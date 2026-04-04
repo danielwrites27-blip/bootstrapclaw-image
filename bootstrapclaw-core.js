@@ -37,6 +37,7 @@ const CHAINS = {
 var offset = 0;
 var pipelineStatus = 'idle';
 var currentKeyword = null;
+var cerebrasRPD = null;
 
 // ── LOGGING ──────────────────────────────────────────────────────────────────
 function log(msg) {
@@ -44,7 +45,7 @@ function log(msg) {
 }
 
 // ── HTTP POST ────────────────────────────────────────────────────────────────
-function httpPost(urlStr, headers, body) {
+function httpPost(urlStr, headers, body, onHeaders) {
   return new Promise(function(resolve, reject) {
     var url = new URL(urlStr);
     var lib = url.protocol === 'https:' ? https : http;
@@ -57,6 +58,7 @@ function httpPost(urlStr, headers, body) {
       method: 'POST',
       headers: reqHeaders
     }, function(res) {
+      if (onHeaders) onHeaders(res.headers);
       var data = '';
       res.on('data', function(c) { data += c; });
       res.on('end', function() {
@@ -81,12 +83,16 @@ async function callLLM(chain, sys, usr) {
     if (!apiKey) { log('[LLM] No key for ' + key); continue; }
     try {
       log('[LLM] Trying ' + key + ' (' + p.model + ')');
-      var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
-        model: p.model,
-        messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
-        max_tokens: p.maxTokens,
-        temperature: 0.7
-      });
+      var onHdr = (key === 'cerebras') ? function(h) {
+  var rpd = h['x-ratelimit-remaining-requests-day'];
+  if (rpd) cerebrasRPD = parseInt(rpd);
+} : null;
+var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
+  model: p.model,
+  messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+  max_tokens: p.maxTokens,
+  temperature: 0.7
+}, onHdr);
       var content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
       if (content && content.trim().length > 0) {
         log('[LLM] OK ' + key + ' ' + content.length + ' chars');
@@ -571,7 +577,7 @@ async function runPipeline(keyword) {
     var p1 = (research.provider||'?').replace(/_/g,'-');
     var p2 = (article.provider||'?').replace(/_/g,'-');
     var p25 = (article.humanizer_provider||'groq-kimi').replace(/_/g,'-');
-    await send('📊 *Run Summary*\n' + elapsed + 's total\nP1: ' + p1 + '\nP2: ' + p2 + '\nP2.5: ' + p25 + '\nWords: ' + article.word_count);
+    await send('📊 *Run Summary*\n' + elapsed + 's total\nP1: ' + p1 + '\nP2: ' + p2 + '\nP2.5: ' + p25 + '\nWords: ' + article.word_count + '\nCerebras RPD: ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() : 'not used'));
     markTopicUsed(keyword);
     writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
     pipelineStatus = 'idle';
