@@ -314,9 +314,10 @@ async function handleRun(keyword) {
       if (!keyword) { await send('⚠️ All queued keywords already used. Add fresh topics to article-ideas.md'); return; }
     } catch(e) { await send('Usage: /run [keyword]'); return; }
   } else {
+    keyword = keyword.trim();
     var manualCheck = isTopicUsed(keyword);
     if (manualCheck.used) {
-      await send('⚠️ Topic already covered: ' + manualCheck.reason + '\nUse a different keyword or add /force to override.');
+      await send('⚠️ Topic already covered: ' + manualCheck.reason + '\nUse a different keyword.');
       return;
     }
   }
@@ -441,8 +442,14 @@ RULES:
   parsed.body_markdown = parsed.body_markdown.replace(/—/g, ' - ');
   var wordCount = parsed.body_markdown.split(/\s+/).filter(Boolean).length;
   log('[P2.5] Humanized: ' + wordCount + ' words, provider: ' + result.provider);
-  article.body_markdown = parsed.body_markdown.replace(/\s*\[\d+\]/g, '');
-  article.word_count = article.body_markdown.split(/\s+/).filter(Boolean).length;
+  var humanizedBody = parsed.body_markdown.replace(/\s*\[\d+\]/g, '');
+  var humanizedCount = humanizedBody.split(/\s+/).filter(Boolean).length;
+  if (humanizedCount < 850) {
+    log('[P2.5] Humanized output too short (' + humanizedCount + ' words), using original writer output');
+    return article;
+  }
+  article.body_markdown = humanizedBody;
+  article.word_count = humanizedCount;
   return article;
 }
 async function runReporter(article) {
