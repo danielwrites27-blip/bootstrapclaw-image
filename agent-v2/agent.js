@@ -2,6 +2,24 @@
 
 const https = require("https");
 
+const fs = require("fs");
+
+function readLocalFile(filePath) {
+  try {
+    const fullPath = "/root/bootstrapclaw/" + filePath;
+
+    if (!fs.existsSync(fullPath)) {
+      return "File not found: " + filePath;
+    }
+
+    const content = fs.readFileSync(fullPath, "utf-8");
+
+    return content.slice(0, 2000);
+  } catch (e) {
+    return "Error reading file: " + e.message;
+  }
+}
+
 const PUTER_URL = "https://api.puter.com/puterai/openai/v1/chat/completions";
 const PUTER_KEY = process.env.PUTER_AUTH_TOKEN;
 
@@ -155,8 +173,14 @@ function executeAction(actionObj) {
       return;
 
     case "inspect_file":
-      console.log("Inspecting file:", actionObj.data);
-      return;
+  console.log("Inspecting file:", actionObj.data);
+
+  const fileContent = readLocalFile(actionObj.data);
+
+  console.log("\n=== FILE CONTENT ===\n");
+  console.log(fileContent);
+
+  return fileContent;
 
     case "fix_bug":
       console.log("Fixing bug:", actionObj.data);
