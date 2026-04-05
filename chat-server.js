@@ -11,28 +11,27 @@ const PORT = 3000;
 // ── PROVIDER CHAIN ────────────────────────────────────────────────────────────
 const PROVIDERS = [
   {
+    name: 'Puter / MiniMax M2.7',
+    url: 'https://api.puter.com/puterai/openai/v1/chat/completions',
+    key: () => process.env.PUTER_AUTH_TOKEN,
+    model: 'minimax/minimax-m2.7',
+    maxTokens: 4096
+  },
+  {
     name: 'Cerebras / Qwen3-235B',
     url: 'https://api.cerebras.ai/v1/chat/completions',
-    key: () => process.env.CEREBRAS_API_KEY,
+    key: () => process.env.CEREBRAS_API_KEY_CHAT,
     model: 'qwen-3-235b-a22b-instruct-2507',
     maxTokens: 4096
   },
   {
     name: 'Groq / Kimi K2',
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    key: () => process.env.GROQ_API_KEY,
+    key: () => process.env.GROQ_API_KEY_CHAT,
     model: 'moonshotai/kimi-k2-instruct',
-    maxTokens: 4096
-  },
-  {
-    name: 'Groq / Llama 3.1 8B',
-    url: 'https://api.groq.com/openai/v1/chat/completions',
-    key: () => process.env.GROQ_API_KEY,
-    model: 'llama-3.1-8b-instant',
     maxTokens: 4096
   }
 ];
-
 // ── LLM CALLER ────────────────────────────────────────────────────────────────
 async function callLLM(messages) {
   for (const p of PROVIDERS) {
