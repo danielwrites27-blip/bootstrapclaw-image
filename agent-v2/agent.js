@@ -268,9 +268,13 @@ async function run() {
 
   // 🔥 HARD OVERRIDE (critical)
   if (taskMemory.inspectedFiles.length >= 2) {
-    actionObj.action = "fix_bug";
-    actionObj.data = "Fix login timeout based on inspected patterns";
-  }
+  console.log("⚠️ Forcing fix_bug mode");
+
+  actionObj = {
+    action: "fix_bug",
+    data: "Fix login timeout based on inspected patterns"
+  };
+}
 
   const result = executeAction(actionObj);
 
