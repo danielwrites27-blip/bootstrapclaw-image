@@ -27,6 +27,11 @@ Rules:
 - Always respond in JSON
 `;
 
+let taskMemory = {
+  goal: "",
+  notes: []
+};
+
 // ── CONTEXT BUILDER ─────────────────────────────────
 
 function buildContext(userInput, history) {
@@ -34,7 +39,6 @@ function buildContext(userInput, history) {
 
   return {
     system: STANDING_RULES,
-    task: taskMemory,
     history: recentHistory,
     input: userInput
   };
