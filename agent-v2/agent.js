@@ -53,7 +53,8 @@ Rules:
 
 let taskMemory = {
   goal: "",
-  notes: []
+  notes: [],
+  inspectedFiles: []
 };
 
 // ── CONTEXT BUILDER ─────────────────────────────────
@@ -176,22 +177,22 @@ function executeAction(actionObj) {
 
   const filePath = actionObj.data;
 
-  // Validate file path
   if (!filePath.includes(".") || filePath.length > 100) {
     console.log("Invalid file path:", filePath);
     return;
   }
 
+  // prevent duplicate inspection
+  if (taskMemory.inspectedFiles.includes(filePath)) {
+    console.log("Already inspected:", filePath);
+    return;
+  }
+
+  taskMemory.inspectedFiles.push(filePath);
+
   console.log("Inspecting file:", filePath);
 
   const fileContent = readLocalFile(filePath);
-
-  console.log("\n=== FILE CONTENT ===\n");
-  console.log(fileContent);
-
-  return fileContent;
-
-  const fileContent = readLocalFile(actionObj.data);
 
   console.log("\n=== FILE CONTENT ===\n");
   console.log(fileContent);
