@@ -65,28 +65,29 @@ let taskMemory = {
 function buildContext(userInput, history) {
   const recentHistory = history.slice(-5);
 
-  return {
-    let dynamicSystem = STANDING_RULES;
+  let dynamicSystem = STANDING_RULES;
 
-if (taskMemory.inspectedFiles.length >= 2) {
-  dynamicSystem += `
+  // Force fix after enough inspection
+  if (taskMemory.inspectedFiles.length >= 2) {
+    dynamicSystem += `
 You have already inspected enough files.
 You MUST now choose action "fix_bug".
 Do NOT inspect more files.
 `;
-}
+  }
 
-return {
-  system: dynamicSystem,
-  history: recentHistory,
-  input: userInput + `
+  return {
+    system: dynamicSystem,
+    history: recentHistory,
+    input: userInput + `
 
 Already inspected files:
 ${taskMemory.inspectedFiles.join(", ")}
 
 Do NOT inspect the same file again.
 `
-};
+  };
+}
 
 // ── LLM CALL ────────────────────────────────────────
 
@@ -201,7 +202,6 @@ function executeAction(actionObj) {
     return;
   }
 
-  // prevent duplicate inspection
   if (taskMemory.inspectedFiles.includes(filePath)) {
     console.log("Already inspected:", filePath);
     return;
@@ -215,6 +215,11 @@ function executeAction(actionObj) {
 
   console.log("\n=== FILE CONTENT ===\n");
   console.log(fileContent);
+
+  // 🔥 IMPORTANT: handle missing file
+  if (fileContent.startsWith("File not found")) {
+    return "FILE_NOT_FOUND";
+  }
 
   return fileContent;
 
@@ -261,7 +266,15 @@ const context = buildContext(instruction, history);
       break;
     }
 
-    executeAction(actionObj);
+    const result = executeAction(actionObj);
+
+// If file not found → force reasoning
+if (result === "FILE_NOT_FOUND") {
+  history.push({
+    role: "user",
+    content: "The file does not exist. Stop searching for files and fix the bug based on reasoning."
+  });
+}
 
     // Add response to history
     history.push({
