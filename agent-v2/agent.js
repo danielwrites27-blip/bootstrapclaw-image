@@ -66,17 +66,27 @@ function buildContext(userInput, history) {
   const recentHistory = history.slice(-5);
 
   return {
-    system: STANDING_RULES,
-    history: recentHistory,
-    input: userInput + `
+    let dynamicSystem = STANDING_RULES;
+
+if (taskMemory.inspectedFiles.length >= 2) {
+  dynamicSystem += `
+You have already inspected enough files.
+You MUST now choose action "fix_bug".
+Do NOT inspect more files.
+`;
+}
+
+return {
+  system: dynamicSystem,
+  history: recentHistory,
+  input: userInput + `
 
 Already inspected files:
 ${taskMemory.inspectedFiles.join(", ")}
 
 Do NOT inspect the same file again.
 `
-  };
-}
+};
 
 // ── LLM CALL ────────────────────────────────────────
 
