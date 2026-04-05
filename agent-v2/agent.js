@@ -138,6 +138,29 @@ async function callLLM(context) {
   return "All providers failed";
 }
 
+function executeAction(actionObj) {
+
+  console.log("\n=== ACTION EXECUTION ===\n");
+
+  switch (actionObj.action) {
+
+    case "request information":
+      console.log("Agent asks:", actionObj.data);
+      return;
+
+    case "inspect_file":
+      console.log("Inspecting file:", actionObj.data);
+      return;
+
+    case "fix_bug":
+      console.log("Fixing bug:", actionObj.data);
+      return;
+
+    default:
+      console.log("Unknown action:", actionObj.action);
+  }
+}
+
 // ── TEST RUN ────────────────────────────────────────
 
 async function run() {
@@ -156,8 +179,22 @@ async function run() {
 
   try {
     const response = await callLLM(context);
-    console.log("\n=== RESPONSE ===\n");
-    console.log(response);
+
+console.log("\n=== RESPONSE ===\n");
+console.log(response);
+
+// Parse JSON
+let actionObj;
+
+try {
+  actionObj = JSON.parse(response);
+} catch (e) {
+  console.log("Failed to parse JSON");
+  return;
+}
+
+// Execute action
+executeAction(actionObj);
   } catch (e) {
     console.error("Error:", e.message);
   }
