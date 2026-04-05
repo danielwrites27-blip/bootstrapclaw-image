@@ -68,7 +68,7 @@ function buildContext(userInput, history) {
   let dynamicSystem = STANDING_RULES;
 
   // Force fix after enough inspection
-  if (taskMemory.inspectedFiles.length >= 2) {
+  if (i >= 2) {
     dynamicSystem += `
 You have already inspected enough files.
 You MUST now choose action "fix_bug".
