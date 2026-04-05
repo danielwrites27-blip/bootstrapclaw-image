@@ -65,7 +65,13 @@ function buildContext(userInput, history) {
   return {
     system: STANDING_RULES,
     history: recentHistory,
-    input: userInput
+    input: userInput + `
+
+Already inspected files:
+${taskMemory.inspectedFiles.join(", ")}
+
+Do NOT inspect the same file again.
+`
   };
 }
 
