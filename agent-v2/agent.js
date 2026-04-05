@@ -10,17 +10,22 @@ const PUTER_KEY = process.env.PUTER_AUTH_TOKEN;
 const STANDING_RULES = `
 You are an autonomous coding agent.
 
+You MUST respond in JSON format only.
+
+Format:
+{
+  "thought": "what you are thinking",
+  "action": "what to do next",
+  "data": "any details"
+}
+
 Rules:
 - Be precise
 - Do not guess
 - Fix root problems only
 - Do not create new bugs
+- Always respond in JSON
 `;
-
-let taskMemory = {
-  goal: "",
-  notes: []
-};
 
 // ── CONTEXT BUILDER ─────────────────────────────────
 
@@ -138,7 +143,10 @@ async function run() {
     { role: "assistant", content: "hi" }
   ];
 
-  const context = buildContext("How to fix login timeout bug?", history);
+  const context = buildContext(
+  "Fix login timeout bug. Decide next step.",
+  history
+);
 
   console.log("=== THINKING ===");
 
