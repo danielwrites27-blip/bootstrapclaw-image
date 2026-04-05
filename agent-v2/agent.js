@@ -173,7 +173,23 @@ function executeAction(actionObj) {
       return;
 
     case "inspect_file":
-  console.log("Inspecting file:", actionObj.data);
+
+  const filePath = actionObj.data;
+
+  // Validate file path
+  if (!filePath.includes(".") || filePath.length > 100) {
+    console.log("Invalid file path:", filePath);
+    return;
+  }
+
+  console.log("Inspecting file:", filePath);
+
+  const fileContent = readLocalFile(filePath);
+
+  console.log("\n=== FILE CONTENT ===\n");
+  console.log(fileContent);
+
+  return fileContent;
 
   const fileContent = readLocalFile(actionObj.data);
 
