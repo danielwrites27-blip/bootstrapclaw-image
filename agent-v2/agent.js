@@ -349,18 +349,22 @@ async function run() {
     // ── Execute action ────────────────────────────────
     const result = executeAction(actionObj);
 
+    // ── Append assistant turn first ──────────────────
+    // The assistant's action must appear in history BEFORE any tool-result
+    // feedback, so the model reads: action → consequence (not the reverse).
+    history.push({ role: "assistant", content: response });
+
     // ── Feed FILE_NOT_FOUND signal back into history ──
-    // Must be added BEFORE the assistant turn so model sees it immediately
+    // Correct conversation order:
+    //   assistant: {"action":"inspect_file", "data":"..."}   ← what the model did
+    //   user:      "That file does not exist. Fix the bug."  ← tool result / consequence
     if (result === "FILE_NOT_FOUND") {
       console.log("Injecting FILE_NOT_FOUND signal into history.");
       history.push({
         role:    "user",
-        content: "The file you requested does not exist. Stop searching for files. Fix the bug using your existing knowledge and any context already gathered."
+        content: "The file you requested does not exist. Do not search for more files. Fix the login timeout bug now using your existing knowledge and any context already gathered."
       });
     }
-
-    // ── Append assistant turn ─────────────────────────
-    history.push({ role: "assistant", content: response });
 
     // ── Terminal condition ────────────────────────────
     if (actionObj.action === "fix_bug") {
