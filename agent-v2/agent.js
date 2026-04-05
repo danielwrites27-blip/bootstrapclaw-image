@@ -229,7 +229,13 @@ async function run() {
 
     console.log(`\n=== LOOP ${i + 1} ===`);
 
-    const context = buildContext("Continue solving the task", history);
+    let instruction = "Continue solving the task";
+
+if (taskMemory.inspectedFiles.length >= 2) {
+  instruction = "You have enough information. Fix the bug now.";
+}
+
+const context = buildContext(instruction, history);
 
     const response = await callLLM(context);
 
