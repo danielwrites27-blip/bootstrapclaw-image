@@ -72,6 +72,7 @@ function callLLM(context) {
 
       res.on("end", () => {
         try {
+          console.log("RAW RESPONSE:", data);
           const parsed = JSON.parse(data);
           const msg = parsed?.choices?.[0]?.message;
 
