@@ -73,8 +73,15 @@ function callLLM(context) {
       res.on("end", () => {
         try {
           const parsed = JSON.parse(data);
-          const text = parsed?.choices?.[0]?.message?.content;
-          resolve(text || "No response");
+          const msg = parsed?.choices?.[0]?.message;
+
+const text =
+  msg?.content ||
+  msg?.reasoning_content ||
+  parsed?.choices?.[0]?.text ||
+  "No response";
+
+resolve(text);
         } catch (e) {
           reject(e);
         }
