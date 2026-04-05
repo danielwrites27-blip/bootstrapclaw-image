@@ -24,9 +24,13 @@ curl -s -o /root/bootstrapclaw/bootstrapclaw-core.js \
 pkill -f bootstrapclaw-core.js 2>/dev/null
 sleep 2
 
-# Start
+# Start pipeline
 node /root/bootstrapclaw/bootstrapclaw-core.js >> /root/bootstrapclaw/data/core.log 2>&1 &
-echo "[startup] Started PID: $!"
+echo "[startup] Pipeline PID: $!"
+
+# Start chat server
+node /root/bootstrapclaw/chat-server.js >> /root/bootstrapclaw/data/chat.log 2>&1 &
+echo "[startup] Chat server PID: $!"
 
 # Keep container alive
 wait
