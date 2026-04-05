@@ -242,38 +242,54 @@ async function run() {
 
   for (let i = 0; i < 3; i++) {
 
-    console.log(`\n=== LOOP ${i + 1} ===`);
+  console.log(`\n=== LOOP ${i + 1} ===`);
 
-    let instruction = "Continue solving the task";
+  let instruction = "Continue solving the task";
 
-if (taskMemory.inspectedFiles.length >= 2) {
-  instruction = "You have enough information. Fix the bug now.";
-}
+  if (taskMemory.inspectedFiles.length >= 2) {
+    instruction = "You have enough information. Fix the bug now.";
+  }
 
-const context = buildContext(instruction, history);
+  const context = buildContext(instruction, history);
 
-    const response = await callLLM(context);
+  const response = await callLLM(context);
 
-    console.log("\n=== RESPONSE ===\n");
-    console.log(response);
+  console.log("\n=== RESPONSE ===\n");
+  console.log(response);
 
-    let actionObj;
+  let actionObj;
 
-    try {
-      actionObj = JSON.parse(response);
-    } catch (e) {
-      console.log("Failed to parse JSON");
-      break;
-    }
+  try {
+    actionObj = JSON.parse(response);
+  } catch (e) {
+    console.log("Failed to parse JSON");
+    break;
+  }
 
-    const result = executeAction(actionObj);
+  // 🔥 HARD OVERRIDE (critical)
+  if (taskMemory.inspectedFiles.length >= 2) {
+    actionObj.action = "fix_bug";
+    actionObj.data = "Fix login timeout based on inspected patterns";
+  }
 
-// If file not found → force reasoning
-if (result === "FILE_NOT_FOUND") {
+  const result = executeAction(actionObj);
+
+  if (result === "FILE_NOT_FOUND") {
+    history.push({
+      role: "user",
+      content: "The file does not exist. Stop searching and fix the bug based on reasoning."
+    });
+  }
+
   history.push({
-    role: "user",
-    content: "The file does not exist. Stop searching for files and fix the bug based on reasoning."
+    role: "assistant",
+    content: response
   });
+
+  if (actionObj.action === "fix_bug") {
+    console.log("\n=== TASK COMPLETE ===");
+    break;
+  }
 }
 
     // Add response to history
