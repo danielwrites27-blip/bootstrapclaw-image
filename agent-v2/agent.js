@@ -49,6 +49,9 @@ Rules:
 - Do not create new bugs
 - ALWAYS use one of the allowed actions
 - Always respond in JSON
+- After inspecting 2–3 files, you MUST choose "fix_bug"
+- Do NOT keep inspecting indefinitely
+- Prefer action over exploration
 `;
 
 let taskMemory = {
