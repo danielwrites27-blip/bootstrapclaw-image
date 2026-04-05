@@ -171,38 +171,43 @@ function executeAction(actionObj) {
 
 async function run() {
 
-  const history = [
-    { role: "user", content: "hello" },
-    { role: "assistant", content: "hi" }
+  let history = [
+    { role: "user", content: "Fix login timeout bug" }
   ];
 
-  const context = buildContext(
-  "Fix login timeout bug. Decide next step.",
-  history
-);
+  for (let i = 0; i < 3; i++) {
 
-  console.log("=== THINKING ===");
+    console.log(`\n=== LOOP ${i + 1} ===`);
 
-  try {
+    const context = buildContext("Continue solving the task", history);
+
     const response = await callLLM(context);
 
-console.log("\n=== RESPONSE ===\n");
-console.log(response);
+    console.log("\n=== RESPONSE ===\n");
+    console.log(response);
 
-// Parse JSON
-let actionObj;
+    let actionObj;
 
-try {
-  actionObj = JSON.parse(response);
-} catch (e) {
-  console.log("Failed to parse JSON");
-  return;
-}
+    try {
+      actionObj = JSON.parse(response);
+    } catch (e) {
+      console.log("Failed to parse JSON");
+      break;
+    }
 
-// Execute action
-executeAction(actionObj);
-  } catch (e) {
-    console.error("Error:", e.message);
+    executeAction(actionObj);
+
+    // Add response to history
+    history.push({
+      role: "assistant",
+      content: response
+    });
+
+    // Stop if bug is fixed
+    if (actionObj.action === "fix_bug") {
+      console.log("\n=== TASK COMPLETE ===");
+      break;
+    }
   }
 }
 
