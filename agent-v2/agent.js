@@ -15,15 +15,21 @@ You MUST respond in JSON format only.
 Format:
 {
   "thought": "what you are thinking",
-  "action": "what to do next",
+  "action": "one of: request_information, inspect_file, fix_bug",
   "data": "any details"
 }
+
+Allowed actions ONLY:
+- request_information
+- inspect_file
+- fix_bug
 
 Rules:
 - Be precise
 - Do not guess
 - Fix root problems only
 - Do not create new bugs
+- ALWAYS use one of the allowed actions
 - Always respond in JSON
 `;
 
@@ -144,7 +150,7 @@ function executeAction(actionObj) {
 
   switch (actionObj.action) {
 
-    case "request information":
+    case "request_information":
       console.log("Agent asks:", actionObj.data);
       return;
 
