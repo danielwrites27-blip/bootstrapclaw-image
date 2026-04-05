@@ -37,63 +37,96 @@ function buildContext(userInput, history) {
 
 // ── LLM CALL ────────────────────────────────────────
 
-function callLLM(context) {
-  return new Promise((resolve, reject) => {
+async function callLLM(context) {
 
-    const messages = [
-      { role: "system", content: context.system },
-      ...context.history,
-      { role: "user", content: context.input }
-    ];
+  const providers = [
+    {
+      name: "Puter M2.7",
+      url: "https://api.puter.com/puterai/openai/v1/chat/completions",
+      key: process.env.PUTER_AUTH_TOKEN,
+      model: "minimax/minimax-m2.7"
+    },
+    {
+      name: "Cerebras Qwen",
+      url: "https://api.cerebras.ai/v1/chat/completions",
+      key: process.env.CEREBRAS_API_KEY_CHAT,
+      model: "qwen-3-235b-a22b-instruct-2507"
+    }
+  ];
 
-    const body = JSON.stringify({
-      model: "minimax/minimax-m2.7",
-      messages,
-      max_tokens: 500,
-      temperature: 0.7
-    });
+  const messages = [
+    { role: "system", content: context.system },
+    ...context.history,
+    { role: "user", content: context.input }
+  ];
 
-    const url = new URL(PUTER_URL);
+  for (const p of providers) {
 
-    const req = https.request({
-      hostname: url.hostname,
-      path: url.pathname,
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + PUTER_KEY,
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body)
-      }
-    }, (res) => {
+    if (!p.key) continue;
 
-      let data = "";
+    try {
 
-      res.on("data", chunk => data += chunk);
+      console.log("Trying:", p.name);
 
-      res.on("end", () => {
-        try {
-          console.log("RAW RESPONSE:", data);
-          const parsed = JSON.parse(data);
-          const msg = parsed?.choices?.[0]?.message;
-
-const text =
-  msg?.content ||
-  msg?.reasoning_content ||
-  parsed?.choices?.[0]?.text ||
-  "No response";
-
-resolve(text);
-        } catch (e) {
-          reject(e);
-        }
+      const body = JSON.stringify({
+        model: p.model,
+        messages,
+        max_tokens: 500,
+        temperature: 0.7
       });
-    });
 
-    req.on("error", reject);
+      const url = new URL(p.url);
 
-    req.write(body);
-    req.end();
-  });
+      const response = await new Promise((resolve, reject) => {
+
+        const req = https.request({
+          hostname: url.hostname,
+          path: url.pathname,
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + p.key,
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body)
+          }
+        }, (res) => {
+
+          let data = "";
+
+          res.on("data", chunk => data += chunk);
+
+          res.on("end", () => resolve(data));
+        });
+
+        req.on("error", reject);
+        req.write(body);
+        req.end();
+      });
+
+      console.log("RAW RESPONSE:", response);
+
+      const parsed = JSON.parse(response);
+
+      // detect Puter failure
+      if (parsed?.code === "insufficient_funds") {
+        console.log("Puter exhausted → switching...");
+        continue;
+      }
+
+      const msg = parsed?.choices?.[0]?.message;
+
+      const text =
+        msg?.content ||
+        msg?.reasoning_content ||
+        parsed?.choices?.[0]?.text;
+
+      if (text) return text;
+
+    } catch (e) {
+      console.log("Provider failed:", e.message);
+    }
+  }
+
+  return "All providers failed";
 }
 
 // ── TEST RUN ────────────────────────────────────────
