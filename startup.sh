@@ -28,4 +28,8 @@ echo "[startup] Pipeline PID: $!"
 node /root/bootstrapclaw/chat-server.js >> /root/bootstrapclaw/data/chat.log 2>&1 &
 echo "[startup] Chat server PID: $!"
 # Keep container alive
+curl -s -o /root/bootstrapclaw/agent-chat.js \
+  https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/agent-chat.js
+node /root/bootstrapclaw/agent-chat.js >> /root/bootstrapclaw/data/agent.log 2>&1 &
+echo "[startup] Agent PID: $!"
 wait
