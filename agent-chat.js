@@ -111,10 +111,25 @@ function extractJSON(raw) {
 // ── STREAMING LLM (for agent — collects full response for JSON parsing) ───────
 async function callLLMStream(messages, onChunk) {
   const PROVIDERS = [
-    { name: 'Puter / MiniMax M2.7',   url: 'https://api.puter.com/puterai/openai/v1/chat/completions', key: process.env.PUTER_AUTH_TOKEN,       model: 'minimax/minimax-m2.7' },
-    { name: 'Cerebras / Qwen3-235B',  url: 'https://api.cerebras.ai/v1/chat/completions',              key: process.env.CEREBRAS_API_KEY_CHAT,   model: 'qwen-3-235b-a22b-instruct-2507' },
-    { name: 'Groq / Kimi K2',         url: 'https://api.groq.com/openai/v1/chat/completions',          key: process.env.GROQ_API_KEY_CHAT,       model: 'moonshotai/kimi-k2-instruct' }
-  ];
+  {
+    name: 'SambaNova / MiniMax M2.5',
+    url: 'https://api.sambanova.ai/v1/chat/completions',
+    key: process.env.SAMBANOVA_API_KEY_CHAT,
+    model: 'MiniMax-M2.5'
+  },
+  {
+    name: 'SambaNova / Qwen3-235B',
+    url: 'https://api.sambanova.ai/v1/chat/completions',
+    key: process.env.SAMBANOVA_API_KEY_CHAT,
+    model: 'Qwen3-235B'
+  },
+  {
+    name: 'Cerebras / Qwen3-235B',
+    url: 'https://api.cerebras.ai/v1/chat/completions',
+    key: process.env.CEREBRAS_API_KEY_CHAT,
+    model: 'qwen-3-235b-a22b-instruct-2507'
+  }
+];
 
   for (const p of PROVIDERS) {
     if (!p.key) continue;
