@@ -111,9 +111,8 @@ function extractJSON(raw) {
 // ── STREAMING LLM (for agent — collects full response for JSON parsing) ───────
 async function callLLMStream(messages, onChunk) {
   const PROVIDERS = [
-    { name: 'SambaNova / MiniMax M2.5', url: 'https://api.sambanova.ai/v1/chat/completions', key: process.env.SAMBANOVA_API_KEY_CHAT, model: 'MiniMax-M2.5',                  stream: false },
-    { name: 'SambaNova / Qwen3-235B',   url: 'https://api.sambanova.ai/v1/chat/completions', key: process.env.SAMBANOVA_API_KEY_CHAT, model: 'Qwen3-235B',                     stream: false },
-    { name: 'Cerebras / Qwen3-235B',    url: 'https://api.cerebras.ai/v1/chat/completions',  key: process.env.CEREBRAS_API_KEY_CHAT,  model: 'qwen-3-235b-a22b-instruct-2507', stream: true  }
+    { name: 'SambaNova / Qwen3-235B', url: 'https://api.sambanova.ai/v1/chat/completions', key: process.env.SAMBANOVA_API_KEY_CHAT, model: 'Qwen3-235B',                     stream: false },
+    { name: 'Cerebras / Qwen3-235B',  url: 'https://api.cerebras.ai/v1/chat/completions',  key: process.env.CEREBRAS_API_KEY_CHAT,  model: 'qwen-3-235b-a22b-instruct-2507', stream: true  }
   ];
 
   for (const p of PROVIDERS) {
