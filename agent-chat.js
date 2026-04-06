@@ -111,30 +111,16 @@ function extractJSON(raw) {
 // ── STREAMING LLM (for agent — collects full response for JSON parsing) ───────
 async function callLLMStream(messages, onChunk) {
   const PROVIDERS = [
-  {
-    name: 'SambaNova / MiniMax M2.5',
-    url: 'https://api.sambanova.ai/v1/chat/completions',
-    key: process.env.SAMBANOVA_API_KEY_CHAT,
-    model: 'MiniMax-M2.5'
-  },
-  {
-    name: 'SambaNova / Qwen3-235B',
-    url: 'https://api.sambanova.ai/v1/chat/completions',
-    key: process.env.SAMBANOVA_API_KEY_CHAT,
-    model: 'Qwen3-235B'
-  },
-  {
-    name: 'Cerebras / Qwen3-235B',
-    url: 'https://api.cerebras.ai/v1/chat/completions',
-    key: process.env.CEREBRAS_API_KEY_CHAT,
-    model: 'qwen-3-235b-a22b-instruct-2507'
-  }
-];
+    { name: 'SambaNova / MiniMax M2.5', url: 'https://api.sambanova.ai/v1/chat/completions', key: process.env.SAMBANOVA_API_KEY_CHAT, model: 'MiniMax-M2.5',                  stream: false },
+    { name: 'SambaNova / Qwen3-235B',   url: 'https://api.sambanova.ai/v1/chat/completions', key: process.env.SAMBANOVA_API_KEY_CHAT, model: 'Qwen3-235B',                     stream: false },
+    { name: 'Cerebras / Qwen3-235B',    url: 'https://api.cerebras.ai/v1/chat/completions',  key: process.env.CEREBRAS_API_KEY_CHAT,  model: 'qwen-3-235b-a22b-instruct-2507', stream: true  }
+  ];
 
   for (const p of PROVIDERS) {
     if (!p.key) continue;
     try {
-      const body = JSON.stringify({ model: p.model, messages, max_tokens: 4096, temperature: 0.3, stream: true });
+      const useStream = p.stream !== false;
+      const body = JSON.stringify({ model: p.model, messages, max_tokens: 4096, temperature: 0.3, stream: useStream });
       const fullText = await new Promise((resolve, reject) => {
         const url = new URL(p.url);
         const req = https.request({
@@ -143,6 +129,20 @@ async function callLLMStream(messages, onChunk) {
         }, res => {
           if (res.statusCode !== 200) { res.resume(); reject(new Error('HTTP ' + res.statusCode)); return; }
           onChunk({ type: 'provider', provider: p.name });
+          if (!useStream) {
+            let data = '';
+            res.on('data', c => data += c);
+            res.on('end', () => {
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed?.choices?.[0]?.message?.content || '';
+                if (content) onChunk({ type: 'llm_chunk', content });
+                resolve(content);
+              } catch(e) { reject(new Error('JSON parse failed')); }
+            });
+            res.on('error', reject);
+            return;
+          }
           let buf = '', full = '';
           res.on('data', chunk => {
             buf += chunk.toString();
