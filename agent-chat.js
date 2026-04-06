@@ -734,7 +734,8 @@ const HTML = `<!DOCTYPE html>
 
       case 'done': {
         let html = '<div class="done-title">✅ Task Complete</div>';
-        html += '<div class="done-summary">' + escHtml(data.summary || '') + '</div>';
+        const summary = typeof data.summary === 'object' ? JSON.stringify(data.summary, null, 2) : (data.summary || '');
+        html += '<div class="done-summary">' + escHtml(summary) + '</div>';
         if (data.writtenFiles?.length > 0) {
           html += '<div class="done-files">Files written: ' + data.writtenFiles.map(f => '• ' + f).join(' ') + '</div>';
         }
