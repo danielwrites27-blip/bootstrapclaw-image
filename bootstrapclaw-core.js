@@ -459,7 +459,7 @@ RULES:
 
   var usr = 'Humanize this article body. Return only the JSON object.\n\n' + article.body_markdown;
 
-  var result = await callLLM('reporter', sys, usr);
+  var result = await callLLM('humanizer', sys, usr);
   var parsed;
   try {
     var clean = result.content.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
