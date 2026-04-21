@@ -373,13 +373,17 @@ async function runWriter(research) {
 
   var article;
   try {
+    var { jsonrepair } = require('jsonrepair');
     var cleaned = result.content.replace(/```json/g,'').replace(/```/g,'').trim();
-    // Find JSON boundaries robustly
     var start = cleaned.indexOf('{');
     var end = cleaned.lastIndexOf('}');
     if (start === -1 || end === -1) throw new Error('No JSON object found in response');
     cleaned = cleaned.slice(start, end + 1);
-    article = JSON.parse(cleaned);
+    try {
+      article = JSON.parse(cleaned);
+    } catch(e) {
+      article = JSON.parse(jsonrepair(cleaned));
+    }
   } catch(e) {
     throw new Error('Bad JSON from writer: ' + e.message + ' | Raw: ' + result.content.slice(0,200));
   }
