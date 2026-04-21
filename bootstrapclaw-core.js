@@ -713,5 +713,4 @@ setInterval(function() {
     ).catch(console.error);
   }
 }, 60 * 1000);
-refreshCerebrasRPD();
-poll();
+Promise.race([refreshCerebrasRPD(), new Promise(function(r) { setTimeout(r, 12000); })]).catch(function(e) { log('[RPD] Startup check skipped: ' + e.message); }).then(function() { poll(); });
