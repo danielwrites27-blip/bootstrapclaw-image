@@ -26,6 +26,8 @@ echo "[startup] Pulling latest code from GitHub..."
 curl -s --max-time 30 -o /root/bootstrapclaw/bootstrapclaw-core.js https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/bootstrapclaw-core.js || echo "[startup] Pull failed - using cached bootstrapclaw-core.js"
 curl -s --max-time 30 -o /root/bootstrapclaw/chat-server.js https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/chat-server.js || echo "[startup] Pull failed - using cached chat-server.js"
 curl -s --max-time 30 -o /root/bootstrapclaw/agent-chat.js https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/agent-chat.js || echo "[startup] Pull failed - using cached agent-chat.js"
+curl -s --max-time 30 -H "Authorization: token $GITHUB_TOKEN" -o /root/bootstrapclaw/package.json https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/package.json || echo "[startup] Pull failed - using cached package.json"
+cd /root/bootstrapclaw && npm install --silent
 echo "[startup] Pull complete"
 
 # Start pipeline
