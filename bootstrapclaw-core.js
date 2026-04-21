@@ -373,7 +373,7 @@ async function runWriter(research) {
 
   var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
 
-  var result = await callLLM('writer', sys, usr, { minChars: 3000 });
+  var result = await callLLM('writer', sys, usr, { minChars: 3500 });
 
   var article;
   try {
