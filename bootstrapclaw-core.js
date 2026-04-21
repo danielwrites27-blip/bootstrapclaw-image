@@ -95,7 +95,7 @@ function httpPost(urlStr, headers, body, onHeaders) {
 }
 
 // ── CORE LLM CALLER ──────────────────────────────────────────────────────────
-async function callLLM(chain, sys, usr) {
+async function callLLM(chain, sys, usr, opts) {
   var keys = CHAINS[chain];
   for (var i = 0; i < keys.length; i++) {
     var key = keys[i];
@@ -116,6 +116,10 @@ var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
 }, onHdr);
       var content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
       if (content && content.trim().length > 0) {
+        if (opts && opts.minChars && content.trim().length < opts.minChars) {
+          log('[LLM] ' + key + ' response too short (' + content.trim().length + ' chars), trying next');
+          continue;
+        }
         log('[LLM] OK ' + key + ' ' + content.length + ' chars');
         return { content: content.trim(), provider: key, model: p.model };
       }
@@ -369,7 +373,7 @@ async function runWriter(research) {
 
   var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
 
-  var result = await callLLM('writer', sys, usr);
+  var result = await callLLM('writer', sys, usr, { minChars: 3000 });
 
   var article;
   try {
