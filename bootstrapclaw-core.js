@@ -462,8 +462,13 @@ RULES:
   var result = await callLLM('humanizer', sys, usr);
   var parsed;
   try {
+    var { jsonrepair } = require('jsonrepair');
     var clean = result.content.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
-    parsed = JSON.parse(clean);
+    try {
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      parsed = JSON.parse(jsonrepair(clean));
+    }
   } catch(e) {
     log('[P2.5] JSON parse failed, using original body: ' + e.message);
     return article;
