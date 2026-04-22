@@ -124,6 +124,7 @@ var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
         content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
       }
       if (content && content.trim().length > 0) {
+        if (opts && opts.exclude && opts.exclude.indexOf(key) !== -1) { continue; }
         if (opts && opts.minChars && content.trim().length < opts.minChars) {
           log('[LLM] ' + key + ' response too short (' + content.trim().length + ' chars), trying next');
           continue;
@@ -382,32 +383,30 @@ async function runWriter(research) {
 
   var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
 
-  var result = await callLLM('writer', sys, usr, { minChars: 3500 });
-
-  var article;
-  try {
-    var { jsonrepair } = require('jsonrepair');
-    var cleaned = result.content.replace(/```json/g,'').replace(/```/g,'').trim();
-    var start = cleaned.indexOf('{');
-    var end = cleaned.lastIndexOf('}');
-    if (start === -1 || end === -1) throw new Error('No JSON object found in response');
-    cleaned = cleaned.slice(start, end + 1);
+  var { jsonrepair } = require('jsonrepair');
+  var article, result, wordCount;
+  var excludeProviders = [];
+  for (var attempt = 0; attempt < 8; attempt++) {
+    result = await callLLM('writer', sys, usr, { minChars: 3500, exclude: excludeProviders });
     try {
-      article = JSON.parse(cleaned);
+      var cleaned = result.content.replace(/```json/g,'').replace(/```/g,'').trim();
+      var start = cleaned.indexOf('{');
+      var end = cleaned.lastIndexOf('}');
+      if (start === -1 || end === -1) throw new Error('No JSON object found');
+      cleaned = cleaned.slice(start, end + 1);
+      try { article = JSON.parse(cleaned); } catch(e) { article = JSON.parse(jsonrepair(cleaned)); }
     } catch(e) {
-      article = JSON.parse(jsonrepair(cleaned));
+      throw new Error('Bad JSON from writer: ' + e.message + ' | Raw: ' + result.content.slice(0,200));
     }
-  } catch(e) {
-    throw new Error('Bad JSON from writer: ' + e.message + ' | Raw: ' + result.content.slice(0,200));
+    if (!article.title) throw new Error('Writer returned no title');
+    if (!article.body_markdown) throw new Error('Writer returned no body');
+    article.body_markdown = article.body_markdown.replace(/—/g, ' - ');
+    wordCount = article.body_markdown.split(/\s+/).length;
+    if (wordCount >= 800) break;
+    log('[P2] ' + result.provider + ' returned ' + wordCount + ' words, retrying with next provider');
+    excludeProviders.push(result.provider);
   }
-
-  if (!article.title) throw new Error('Writer returned no title');
-  if (!article.body_markdown) throw new Error('Writer returned no body');
-
-  article.body_markdown = article.body_markdown.replace(/—/g, ' - ');
-
-  var wordCount = article.body_markdown.split(/\s+/).length;
-  if (wordCount < 800) throw new Error('Article too short: ' + wordCount + ' words (minimum 800)');
+  if (wordCount < 800) throw new Error('Article too short after all providers: ' + wordCount + ' words');
 
   article.keyword = research.keyword;
   article.written_at = new Date().toISOString();
