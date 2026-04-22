@@ -24,7 +24,7 @@ const PROVIDERS = {
   ollama:          { url: 'https://ollama.com/v1/chat/completions',          key: function(){ return process.env.OLLAMA_API_KEY; },    model: 'gemma3:27b',                    maxTokens: 2048 },
   groq_kimi:       { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'openai/gpt-oss-120b',           maxTokens: 4096 },
   groq_fallback:   { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'llama-3.3-70b-versatile',       maxTokens: 4096 },
-  cloudflare:      { url: 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/@cf/meta/llama-3.3-70b-instruct', key: function(){ return process.env.CLOUDFLARE_API_KEY; }, model: 'llama-3.3-70b-instruct', maxTokens: 4096, responseType: 'cloudflare' },
+  cloudflare:      { url: 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct', key: function(){ return process.env.CLOUDFLARE_API_KEY; }, model: 'llama-4-scout-17b-16e-instruct', maxTokens: 4096, responseType: 'cloudflare' },
   nvidia:          { url: 'https://integrate.api.nvidia.com/v1/chat/completions', key: function(){ return process.env.NVIDIA_API_KEY; }, model: 'nvidia/nemotron-3-super-120b-a12b', maxTokens: 4096 },
 };
 
