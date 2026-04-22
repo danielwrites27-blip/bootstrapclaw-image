@@ -24,11 +24,13 @@ const PROVIDERS = {
   ollama:          { url: 'https://ollama.com/v1/chat/completions',          key: function(){ return process.env.OLLAMA_API_KEY; },    model: 'gemma3:27b',                    maxTokens: 2048 },
   groq_kimi:       { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'openai/gpt-oss-120b',           maxTokens: 4096 },
   groq_fallback:   { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'llama-3.3-70b-versatile',       maxTokens: 4096 },
+  cloudflare:      { url: 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/@cf/meta/llama-3.3-70b-instruct', key: function(){ return process.env.CLOUDFLARE_API_KEY; }, model: 'llama-3.3-70b-instruct', maxTokens: 4096, responseType: 'cloudflare' },
+  nvidia:          { url: 'https://integrate.api.nvidia.com/v1/chat/completions', key: function(){ return process.env.NVIDIA_API_KEY; }, model: 'nvidia/nemotron-3-super-120b-a12b', maxTokens: 4096 },
 };
 
 const CHAINS = {
 researcher:   ['sambanova_llama', 'sambanova_maverick', 'ollama', 'groq_kimi', 'groq_fallback'],
-writer:       ['cerebras', 'sambanova_maverick', 'sambanova_llama', 'ollama', 'groq_kimi', 'groq_fallback'],
+writer:       ['cerebras', 'cloudflare', 'sambanova_maverick', 'sambanova_llama', 'ollama', 'nvidia', 'groq_kimi', 'groq_fallback'],
 humanizer:    ['groq_kimi', 'groq_fallback'],
 orchestrator: ['cerebras', 'groq_kimi', 'groq_fallback'],
 };
@@ -38,6 +40,7 @@ var offset = 0;
 var pipelineStatus = 'idle';
 var currentKeyword = null;
 var cerebrasRPD = null;
+var paused = false;
 
 // ── CEREBRAS RPD CHECK ───────────────────────────────────────────────────────
 async function refreshCerebrasRPD() {
@@ -114,7 +117,12 @@ var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
   max_tokens: p.maxTokens,
   temperature: 0.7
 }, onHdr);
-      var content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+      var content;
+      if (p.responseType === 'cloudflare') {
+        content = res && res.result && res.result.response;
+      } else {
+        content = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+      }
       if (content && content.trim().length > 0) {
         if (opts && opts.minChars && content.trim().length < opts.minChars) {
           log('[LLM] ' + key + ' response too short (' + content.trim().length + ' chars), trying next');
@@ -331,6 +339,7 @@ function markTopicUsed(keyword) {
 }
 
 async function handleRun(keyword) {
+  if (paused) { await send('Pipeline is paused. Use /resume first.'); return; }
   if (pipelineStatus === 'running') { await send('⚠️ Pipeline already running. Use /status to check.'); return; }
   if (!keyword) {
     try {
@@ -632,6 +641,8 @@ async function dispatch(text) {
   if (t === '/logs')           return handleLogs();
   if (t.startsWith('/run'))    return handleRun(t.replace('/run', '').trim());
   if (t === '/restart')        { await send('♻️ Restarting...'); process.exit(0); }
+  if (t === '/pause')          { paused = true;  await send('Pipeline paused. Send /resume to re-enable.'); return; }
+  if (t === '/resume')         { paused = false; await send('Pipeline resumed.'); return; }
   await send('Unknown command: ' + t + '\nType /status for help.');
 }
 
