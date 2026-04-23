@@ -41,6 +41,7 @@ var pipelineStatus = 'idle';
 var currentKeyword = null;
 var cerebrasRPD = null;
 var paused = false;
+var pendingDraft = null;
 
 // ── CEREBRAS RPD CHECK ───────────────────────────────────────────────────────
 async function refreshCerebrasRPD() {
@@ -376,6 +377,40 @@ async function handleRun(keyword) {
   });
 }
 
+async function handleDraft(keyword) {
+  if (paused) { await send('Pipeline is paused. Use /resume first.'); return; }
+  if (pipelineStatus === 'running') { await send('⚠️ Pipeline already running.'); return; }
+  if (pendingDraft) { await send('⚠️ Draft already pending.\nSend /approve to publish or /reject to discard.'); return; }
+  if (!keyword) {
+    try {
+      var ideas = fs.readFileSync(IDEAS, 'utf8').trim().split('\n').filter(function(l) { return l.trim() && !l.startsWith('#'); });
+      if (!ideas.length) { await send('⚠️ No keywords queued.'); return; }
+      keyword = null;
+      for (var i = 0; i < ideas.length; i++) {
+        var candidate = ideas[i].replace(/^[-*]\s*/, '').trim();
+        var check = isTopicUsed(candidate);
+        if (!check.used) { keyword = candidate; break; }
+      }
+      if (!keyword) { await send('⚠️ All queued keywords already used.'); return; }
+    } catch(e) { await send('Usage: /draft [keyword]'); return; }
+  } else {
+    keyword = keyword.trim();
+    var manualCheck = isTopicUsed(keyword);
+    if (manualCheck.used) {
+      await send('⚠️ Topic already covered: ' + manualCheck.reason + '\nUse a different keyword.');
+      return;
+    }
+  }
+  pipelineStatus = 'running';
+  currentKeyword = keyword;
+  runDraftPipeline(keyword).catch(function(err) {
+    log('[draft] Fatal: ' + err.message);
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+    pendingDraft = null;
+    send('❌ *Draft failed*\n' + err.message).catch(function(){});
+  });
+}
 // ── PHASE 2: WRITER ──────────────────────────────────────────────────────────
 async function runWriter(research) {
   log('[P2] Writing article for: ' + research.keyword);
@@ -603,7 +638,66 @@ function runValidator(research, article, devtoUrl) {
   var failed = Object.keys(checks).filter(function(k) { return !checks[k]; });
   return { passed: passed, total: 7, failed: failed, checks: checks };
 }
+async function runDraftPipeline(keyword) {
+  var pipelineStart = Date.now();
+  log('[draft] Start: ' + keyword);
+  await send('🚀 *Draft pipeline started*\nKeyword: _' + keyword + '_');
+  try {
+    var research = await runResearcher(keyword);
+    var article = await runWriter(research);
+    await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
+    article = await runHumanizer(article);
+    await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
+    pendingDraft = { article: article, research: research, keyword: keyword, pipelineStart: pipelineStart };
+    pipelineStatus = 'draft_pending';
+    var preview = article.body_markdown.replace(/!\[.*?\]\(.*?\)\n\n/, '').slice(0, 300);
+    await send('📋 *Draft ready for review*\n\n*Title:* ' + article.title + '\n*Words:* ' + article.word_count + '\n\n*Preview:*\n' + preview + '...\n\n/approve — publish to Dev.to\n/reject — discard draft');
+  } catch(err) {
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+    pendingDraft = null;
+    throw err;
+  }
+}
 
+async function handleApprove() {
+  if (!pendingDraft) { await send('No draft pending. Use /draft [keyword] to create one.'); return; }
+  if (pipelineStatus === 'running') { await send('⚠️ Pipeline already running.'); return; }
+  var draft = pendingDraft;
+  pendingDraft = null;
+  pipelineStatus = 'running';
+  try {
+    var url = await runReporter(draft.article);
+    var validation = runValidator(draft.research, draft.article, url);
+    var elapsed = Math.round((Date.now() - draft.pipelineStart) / 1000);
+    var validatorMsg = validation.failed.length > 0
+      ? '⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', ')
+      : '✅ *Validator: 7/7 checks passed*';
+    await send(validatorMsg);
+    var p1 = (draft.research.provider||'?').replace(/_/g,'-');
+    var p2 = (draft.article.provider||'?').replace(/_/g,'-');
+    var p25 = (draft.article.humanizer_provider||'groq-kimi').replace(/_/g,'-');
+    await send('📊 *Run Summary*\n' + elapsed + 's total\nP1: ' + p1 + '\nP2: ' + p2 + '\nP2.5: ' + p25 + '\nWords: ' + draft.article.word_count + '\nCerebras RPD: ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() : 'not used'));
+    markTopicUsed(draft.keyword);
+    writeRunLog({ keyword: draft.keyword, status: 'published', title: draft.article.title, words: draft.article.word_count, url: url, validator: validation });
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+  } catch(err) {
+    pipelineStatus = 'idle';
+    currentKeyword = null;
+    writeRunLog({ keyword: draft.keyword, status: 'failed', error: err.message });
+    send('❌ *Publish failed*\n' + err.message).catch(function(){});
+  }
+}
+
+async function handleReject() {
+  if (!pendingDraft) { await send('No draft pending.'); return; }
+  var keyword = pendingDraft.keyword;
+  pendingDraft = null;
+  pipelineStatus = 'idle';
+  currentKeyword = null;
+  await send('🗑️ *Draft discarded*\nKeyword: _' + keyword + '_\n\nUse /draft [keyword] to create a new one.');
+}
 async function runPipeline(keyword) {
   var pipelineStart = Date.now();
   log('[pipeline] Start: ' + keyword);
@@ -644,6 +738,9 @@ async function dispatch(text) {
   if (t === '/health')         return handleHealth();
   if (t === '/logs')           return handleLogs();
   if (t.startsWith('/run'))    return handleRun(t.replace('/run', '').trim());
+  if (t.startsWith('/draft'))  return handleDraft(t.replace('/draft', '').trim());
+  if (t === '/approve')        return handleApprove();
+  if (t === '/reject')         return handleReject();
   if (t === '/restart')        { await send('♻️ Restarting...'); process.exit(0); }
   if (t === '/pause')          { paused = true;  await send('Pipeline paused. Send /resume to re-enable.'); return; }
   if (t === '/resume')         { paused = false; await send('Pipeline resumed.'); return; }
