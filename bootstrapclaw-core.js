@@ -43,6 +43,25 @@ var cerebrasRPD = null;
 var paused = false;
 var pendingDraft = null;
 
+// ── AFFILIATE LINKS ───────────────────────────────────────────────────────────
+// Add real links here once PartnerStack/direct programs approve
+// Format: { tool, url, keywords, description }
+var AFFILIATE_LINKS = [
+  { tool: 'FreshBooks', url: 'https://www.freshbooks.com/?ref=PLACEHOLDER', keywords: ['invoic', 'freelanc', 'accounting', 'billing', 'bookkeep', 'self-employ', 'budget'], description: 'accounting and invoicing software for freelancers' },
+  { tool: 'Notion', url: 'https://notion.so/?ref=PLACEHOLDER', keywords: ['productivity', 'notes', 'organiz', 'workspace', 'project', 'task', 'plan'], description: 'all-in-one workspace for notes and project management' },
+  { tool: 'Canva', url: 'https://canva.com/?ref=PLACEHOLDER', keywords: ['design', 'graphic', 'visual', 'brand', 'social media', 'content', 'creat'], description: 'easy graphic design tool for non-designers' },
+  { tool: 'Calendly', url: 'https://calendly.com/?ref=PLACEHOLDER', keywords: ['schedul', 'meeting', 'calendar', 'appointment', 'booking', 'time management'], description: 'automated scheduling tool' },
+  { tool: 'Grammarly', url: 'https://grammarly.com/?ref=PLACEHOLDER', keywords: ['writ', 'email', 'grammar', 'communicat', 'content', 'copy'], description: 'AI writing assistant for clear communication' }
+];
+
+function getAffiliateLinks(keyword) {
+  var kw = (keyword || '').toLowerCase();
+  var matches = AFFILIATE_LINKS.filter(function(link) {
+    return link.keywords.some(function(k) { return kw.includes(k); });
+  }).slice(0, 2);
+  return matches;
+}
+
 // ── CEREBRAS RPD CHECK ───────────────────────────────────────────────────────
 async function refreshCerebrasRPD() {
   try {
@@ -416,7 +435,13 @@ async function runWriter(research) {
   log('[P2] Writing article for: ' + research.keyword);
   await send('✍️ *Phase 2 — Writing*\nAngle: _' + research.angle + '_');
 
-  var sys = 'You are an expert content writer. Write a high-quality, engaging article based on the research provided.\nRules:\n- Minimum 900 words\n- Start with a specific statistic or named study — never an emotional statement\n- Use short paragraphs (2-3 sentences max)\n- No em dashes anywhere\n- No phrases like: by leveraging, in conclusion, game-changer, dive into, what matters most\n- Include inline links using markdown: [anchor text](url)\n- Output ONLY valid JSON — no markdown fences, no explanation';
+  var affiliateMatches = getAffiliateLinks(research.keyword);
+  var affiliateInstruction = '';
+  if (affiliateMatches.length > 0 && !affiliateMatches[0].url.includes('PLACEHOLDER')) {
+    var linkList = affiliateMatches.map(function(l) { return '- ' + l.tool + ': ' + l.url + ' (' + l.description + ')'; }).join('\n');
+    affiliateInstruction = '\n- Naturally embed 1-2 of these affiliate links where relevant to the article content. Use descriptive anchor text, never "click here":\n' + linkList;
+  }
+  var sys = 'You are an expert content writer. Write a high-quality, engaging article based on the research provided.\nRules:\n- Minimum 900 words\n- Start with a specific statistic or named study — never an emotional statement\n- Use short paragraphs (2-3 sentences max)\n- No em dashes anywhere\n- No phrases like: by leveraging, in conclusion, game-changer, dive into, what matters most\n- Include inline links using markdown: [anchor text](url)' + affiliateInstruction + '\n- Output ONLY valid JSON — no markdown fences, no explanation';
 
   var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
 
