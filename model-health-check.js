@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const MODELS_PATH = path.join(__dirname, 'data', 'models.json');
-const PING_TIMEOUT_MS = 15000;
+const PING_TIMEOUT_MS = 15000; // default — overridden per provider via cfg.pingTimeoutMs
 
 // ─── Model name filters ────────────────────────────────────────────────────
 // Patterns that identify models we should NEVER auto-select
@@ -46,9 +46,20 @@ const KNOWN_DEAD = [
   'llama-3.3-70b-instruct', // Cloudflare slug — wrong, use with @cf/ prefix
 ];
 
-function isBadModel(modelId) {
+function extractParamBillions(modelId) {
+  var m = modelId.toLowerCase().match(/(\d+(?:\.\d+)?)b(?:[^0-9]|$)/);
+  if (!m) return null;
+  return parseFloat(m[1]);
+}
+
+function isBadModel(modelId, minParams) {
   if (KNOWN_DEAD.includes(modelId)) return true;
-  return BAD_MODEL_PATTERNS.some(p => p.test(modelId));
+  if (BAD_MODEL_PATTERNS.some(p => p.test(modelId))) return true;
+  if (minParams && minParams > 0) {
+    var params = extractParamBillions(modelId);
+    if (params !== null && params < minParams) return true;
+  }
+  return false;
 }
 
 // ─── Load / save models.json ───────────────────────────────────────────────
@@ -81,7 +92,7 @@ function httpPost(url, headers, body) {
       res.on('end', () => resolve({ status: res.statusCode, body: raw }));
     });
     req.on('error', reject);
-    req.setTimeout(PING_TIMEOUT_MS, () => { req.destroy(); reject(new Error('timeout')); });
+    req.setTimeout(timeout, () => { req.destroy(); reject(new Error('timeout')); });
     req.write(data);
     req.end();
   });
@@ -113,6 +124,7 @@ function httpGet(url, headers) {
 async function pingModel(providerKey, cfg, modelId) {
   const apiKey = process.env[cfg.apiKeyEnv];
   if (!apiKey) return { ok: false, reason: `env var ${cfg.apiKeyEnv} not set` };
+  const timeout = cfg.pingTimeoutMs || PING_TIMEOUT_MS;
 
   try {
     if (cfg.responseType === 'cloudflare') {
@@ -163,9 +175,10 @@ async function discoverModels(providerKey, cfg) {
       );
       if (res.status !== 200) return [];
       const json = JSON.parse(res.body);
+      const min = cfg.minDiscoveryParams || 0;
       return (json.result || [])
         .map(m => m.name || '')
-        .filter(m => m && !isBadModel(m));
+        .filter(m => m && !isBadModel(m, min));
     } else {
       // Standard /v1/models
       const res = await httpGet(
@@ -175,9 +188,10 @@ async function discoverModels(providerKey, cfg) {
       if (res.status !== 200) return [];
       const json = JSON.parse(res.body);
       const rawList = json.data || json.models || [];
+      const min2 = cfg.minDiscoveryParams || 0;
       return rawList
         .map(m => (typeof m === 'string' ? m : m.id || m.name || ''))
-        .filter(m => m && !isBadModel(m));
+        .filter(m => m && !isBadModel(m, min2));
     }
   } catch (e) {
     return [];
@@ -233,20 +247,54 @@ async function checkProvider(providerKey, cfg) {
   // Step 3: preferred list exhausted — auto-discover from provider
   result.reason += ' | preferred list exhausted, discovering models...';
   const discovered = await discoverModels(providerKey, cfg);
+  const minParams = cfg.minDiscoveryParams || 0;
 
-  for (const candidate of discovered) {
-    if (isBadModel(candidate)) continue;
-    if (cfg.preferred.includes(candidate)) continue; // already tried
+  // Step 3a: Tavily research — find which discovered models are well-regarded
+  let tavilyRanked = [];
+  try {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (tavilyKey && discovered.length > 0) {
+      const providerName = cfg.endpoint.replace(/https?:\/\//, '').split('.')[0];
+      const query = providerName + ' best available models 2026 benchmark parameters capabilities';
+      const tRes = await httpPost('https://api.tavily.com/search',
+        { Authorization: 'Bearer ' + tavilyKey },
+        { query, max_results: 5, search_depth: 'basic', include_raw_content: false }
+      );
+      if (tRes && tRes.results) {
+        const combined = tRes.results.map(r => (r.title + ' ' + (r.content || '')).toLowerCase()).join(' ');
+        // Score each discovered candidate by how many Tavily snippets mention it
+        tavilyRanked = discovered
+          .filter(m => !isBadModel(m, minParams) && !cfg.preferred.includes(m))
+          .map(m => {
+            const shortName = m.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const mentions = (combined.match(new RegExp(shortName.slice(0, 8), 'g')) || []).length;
+            return { model: m, mentions };
+          })
+          .sort((a, b) => b.mentions - a.mentions)
+          .map(x => x.model);
+        result.reason += ' | Tavily ranked ' + tavilyRanked.length + ' candidates';
+      }
+    }
+  } catch(e) {
+    result.reason += ' | Tavily search failed: ' + e.message;
+  }
+
+  // Try Tavily-ranked candidates first, then remaining discovered models
+  const orderedCandidates = [
+    ...tavilyRanked,
+    ...discovered.filter(m => !tavilyRanked.includes(m) && !isBadModel(m, minParams) && !cfg.preferred.includes(m))
+  ];
+
+  for (const candidate of orderedCandidates) {
     const pr = await pingModel(providerKey, cfg, candidate);
     if (pr.ok) {
       cfg.current = candidate;
       cfg.last_verified = new Date().toISOString();
       cfg.status = 'ok';
-      // Add to preferred list so we don't have to rediscover next time
       cfg.preferred.unshift(candidate);
       result.newModel = candidate;
       result.changed = true;
-      result.status = 'auto-discovered';
+      result.status = tavilyRanked.includes(candidate) ? 'tavily-discovered' : 'auto-discovered';
       return result;
     }
   }
