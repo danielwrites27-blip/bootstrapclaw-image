@@ -75,7 +75,8 @@ function saveModels(models) {
 }
 
 // ─── HTTP helpers ──────────────────────────────────────────────────────────
-function httpPost(url, headers, body) {
+function httpPost(url, headers, body, timeoutMs) {
+  timeoutMs = timeoutMs || PING_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const mod = u.protocol === 'https:' ? require('https') : require('http');
@@ -92,7 +93,7 @@ function httpPost(url, headers, body) {
       res.on('end', () => resolve({ status: res.statusCode, body: raw }));
     });
     req.on('error', reject);
-    req.setTimeout(timeout, () => { req.destroy(); reject(new Error('timeout')); });
+    req.setTimeout(timeoutMs, () => { req.destroy(); reject(new Error('timeout')); });
     req.write(data);
     req.end();
   });
@@ -134,7 +135,7 @@ async function pingModel(providerKey, cfg, modelId) {
       const res = await httpPost(url, { Authorization: `Bearer ${apiKey}` }, {
         messages: [{ role: 'user', content: 'Reply with: OK' }],
         max_tokens: 5
-      });
+      }, timeout);
       if (res.status !== 200) return { ok: false, reason: `HTTP ${res.status}` };
       const json = JSON.parse(res.body);
       if (!json.success) return { ok: false, reason: `CF error: ${JSON.stringify(json.errors)}` };
@@ -149,7 +150,7 @@ async function pingModel(providerKey, cfg, modelId) {
         messages: [{ role: 'user', content: 'Reply with: OK' }],
         max_tokens: 5,
         stream: false
-      });
+      }, timeout);
       if (res.status !== 200) return { ok: false, reason: `HTTP ${res.status}` };
       const json = JSON.parse(res.body);
       const text = json.choices?.[0]?.message?.content || '';
