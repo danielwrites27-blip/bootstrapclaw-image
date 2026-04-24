@@ -16,6 +16,26 @@ const USED     = BASE_DIR + '/data/used-topics.txt';
 
 if (!TG_TOKEN) { console.error('TELEGRAM_BOT_TOKEN not set'); process.exit(1); }
 
+const { runHealthCheck, MODELS_PATH } = require('./model-health-check');
+
+function getModel(key) {
+  try {
+    return JSON.parse(require('fs').readFileSync(MODELS_PATH, 'utf8'))[key].current;
+  } catch(_) {
+    var fb = {
+      cerebras:'qwen-3-235b-a22b-instruct-2507',
+      cloudflare:'@cf/meta/llama-4-scout-17b-16e-instruct',
+      sambanova_maverick:'Llama-4-Maverick-17B-128E-Instruct',
+      sambanova_llama:'Meta-Llama-3.3-70B-Instruct',
+      ollama:'gemma3:27b',
+      nvidia:'nvidia/nemotron-3-super-120b-a12b',
+      groq_kimi:'openai/gpt-oss-120b',
+      groq_fallback:'llama-3.3-70b-versatile'
+    };
+    return fb[key] || key;
+  }
+}
+
 // ── PROVIDERS ────────────────────────────────────────────────────────────────
 const PROVIDERS = {
   cerebras:        { url: 'https://api.cerebras.ai/v1/chat/completions',     key: function(){ return process.env.CEREBRAS_API_KEY; },  model: 'qwen-3-235b-a22b-instruct-2507', maxTokens: 8192 },
@@ -126,13 +146,17 @@ async function callLLM(chain, sys, usr, opts) {
     var apiKey = p.key();
     if (!apiKey) { log('[LLM] No key for ' + key); continue; }
     try {
-      log('[LLM] Trying ' + key + ' (' + p.model + ')');
+      var currentModel = getModel(key);
+      var currentUrl = (key === 'cloudflare')
+        ? 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/' + currentModel
+        : p.url;
+      log('[LLM] Trying ' + key + ' (' + currentModel + ')');
       var onHdr = (key === 'cerebras') ? function(h) {
   var rpd = h['x-ratelimit-remaining-requests-day'];
   if (rpd) cerebrasRPD = parseInt(rpd);
 } : null;
-var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
-  model: p.model,
+var res = await httpPost(currentUrl, { Authorization: 'Bearer ' + apiKey }, {
+  model: currentModel,
   messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
   max_tokens: p.maxTokens,
   temperature: 0.7
@@ -150,7 +174,7 @@ var res = await httpPost(p.url, { Authorization: 'Bearer ' + apiKey }, {
           continue;
         }
         log('[LLM] OK ' + key + ' ' + content.length + ' chars');
-        return { content: content.trim(), provider: key, model: p.model };
+        return { content: content.trim(), provider: key, model: currentModel };
       }
       log('[LLM] Empty from ' + key + ': ' + JSON.stringify(res).slice(0,150));
     } catch(e) {
@@ -298,7 +322,12 @@ async function handleStatus() {
 }
 
 async function handleHealth() {
-  await send('🩺 *Health Check*\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Pipeline:* ' + pipelineStatus + '\n*Providers:* SambaNova ✅ Cerebras ✅ Ollama ✅ Groq ✅');
+  await send('Running full provider health check...');
+  try {
+    await runHealthCheck('telegram-/health');
+  } catch(e) {
+    await send('Health check error: ' + e.message);
+  }
 }
 
 async function handleLogs() {
@@ -824,6 +853,7 @@ function analysePatterns() {
 
 // ── DAILY REPORT ─────────────────────────────────────────────────────────────
 var lastReportDate = '';
+var lastHealthCheckDate = '';
 setInterval(function() {
   var now = new Date();
   var h = now.getUTCHours();
@@ -843,6 +873,10 @@ setInterval(function() {
         patMsg
       ).catch(console.error);
     }
+  }
+  if (h === 9 && m === 0 && today !== lastHealthCheckDate) {
+    lastHealthCheckDate = today;
+    runHealthCheck('daily-scheduled').catch(function(e) { log('[health] Scheduled error: ' + e.message); });
   }
   if (h === 9 && m === 0 && today !== lastReportDate) {
     lastReportDate = today;
