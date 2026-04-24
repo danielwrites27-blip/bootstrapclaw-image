@@ -1,0 +1,75 @@
+{
+  "cerebras": {
+    "endpoint": "https://api.cerebras.ai/v1",
+    "apiKeyEnv": "CEREBRAS_API_KEY",
+    "responseType": "openai",
+    "current": "qwen-3-235b-a22b-instruct-2507",
+    "preferred": ["qwen-3-235b-a22b-instruct-2507", "llama3.3-70b"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "cloudflare": {
+    "endpoint": "https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run",
+    "apiKeyEnv": "CLOUDFLARE_API_KEY",
+    "responseType": "cloudflare",
+    "discoveryEndpoint": "https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/models/search",
+    "current": "@cf/meta/llama-4-scout-17b-16e-instruct",
+    "preferred": ["@cf/meta/llama-4-scout-17b-16e-instruct", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/meta/llama-3.1-8b-instruct"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "sambanova_maverick": {
+    "endpoint": "https://api.sambanova.ai/v1",
+    "apiKeyEnv": "SAMBANOVA_API_KEY",
+    "responseType": "openai",
+    "current": "Llama-4-Maverick-17B-128E-Instruct",
+    "preferred": ["Llama-4-Maverick-17B-128E-Instruct", "Meta-Llama-3.3-70B-Instruct", "Llama-4-Scout-17B-16E-Instruct"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "sambanova_llama": {
+    "endpoint": "https://api.sambanova.ai/v1",
+    "apiKeyEnv": "SAMBANOVA_API_KEY",
+    "responseType": "openai",
+    "current": "Meta-Llama-3.3-70B-Instruct",
+    "preferred": ["Meta-Llama-3.3-70B-Instruct", "Llama-4-Maverick-17B-128E-Instruct", "Llama-4-Scout-17B-16E-Instruct"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "ollama": {
+    "endpoint": "https://ollama.com/v1",
+    "apiKeyEnv": "OLLAMA_API_KEY",
+    "responseType": "openai",
+    "current": "gemma3:27b",
+    "preferred": ["gemma3:27b", "gemma3:12b", "llama3.3:70b"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "nvidia": {
+    "endpoint": "https://integrate.api.nvidia.com/v1",
+    "apiKeyEnv": "NVIDIA_API_KEY",
+    "responseType": "openai",
+    "current": "nvidia/nemotron-3-super-120b-a12b",
+    "preferred": ["nvidia/nemotron-3-super-120b-a12b", "meta/llama-3.3-70b-instruct", "nvidia/llama-3.3-nemotron-super-49b-v1"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "groq_kimi": {
+    "endpoint": "https://api.groq.com/openai/v1",
+    "apiKeyEnv": "GROQ_API_KEY",
+    "responseType": "openai",
+    "current": "openai/gpt-oss-120b",
+    "preferred": ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"],
+    "last_verified": null,
+    "status": "unknown"
+  },
+  "groq_fallback": {
+    "endpoint": "https://api.groq.com/openai/v1",
+    "apiKeyEnv": "GROQ_API_KEY",
+    "responseType": "openai",
+    "current": "llama-3.3-70b-versatile",
+    "preferred": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"],
+    "last_verified": null,
+    "status": "unknown"
+  }
+}
