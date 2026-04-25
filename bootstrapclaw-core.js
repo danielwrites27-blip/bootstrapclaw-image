@@ -71,7 +71,8 @@ var AFFILIATE_LINKS = [
   { tool: 'Notion', url: 'https://notion.so/?ref=PLACEHOLDER', keywords: ['productivity', 'notes', 'organiz', 'workspace', 'project', 'task', 'plan'], description: 'all-in-one workspace for notes and project management' },
   { tool: 'Canva', url: 'https://canva.com/?ref=PLACEHOLDER', keywords: ['design', 'graphic', 'visual', 'brand', 'social media', 'content', 'creat'], description: 'easy graphic design tool for non-designers' },
   { tool: 'Calendly', url: 'https://calendly.com/?ref=PLACEHOLDER', keywords: ['schedul', 'meeting', 'calendar', 'appointment', 'booking', 'time management'], description: 'automated scheduling tool' },
-  { tool: 'Grammarly', url: 'https://grammarly.com/?ref=PLACEHOLDER', keywords: ['writ', 'email', 'grammar', 'communicat', 'content', 'copy'], description: 'AI writing assistant for clear communication' }
+  { tool: 'Grammarly', url: 'https://grammarly.com/?ref=PLACEHOLDER', keywords: ['writ', 'email', 'grammar', 'communicat', 'content', 'copy'], description: 'AI writing assistant for clear communication' },
+  { tool: 'CustomGPT.ai', url: 'https://customgpt.ai/?fpr=daniel65', keywords: ['ai', 'chatbot', 'automat', 'custom', 'gpt', 'workflow', 'assistant', 'small business', 'tool'], description: 'custom AI chatbot builder for businesses' }
 ];
 
 function getAffiliateLinks(keyword) {
