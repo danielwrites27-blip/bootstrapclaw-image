@@ -601,17 +601,36 @@ RULES:
 async function runReporter(article) {
   log('[P3] Publishing: ' + article.title);
   await send('📤 *Phase 3 — Publishing*\nTitle: _' + article.title + '_');
-
   // Step 1: Get cover image from Pexels
   var coverUrl = null;
   try {
     var pexelsKey = process.env.PEXELS_API_KEY;
     if (pexelsKey) {
-      var searchTerm = encodeURIComponent(article.keyword || 'students studying');
+      // Map article keyword to safe, screenshot-free Pexels search terms
+      var topicMap = [
+        { match: /\b(ai|chatbot|gpt|automat|machine learning)\b/i,     safe: 'business team meeting' },
+        { match: /\b(productiv|tools|workflow|efficiency)\b/i,          safe: 'person working desk' },
+        { match: /\b(freelanc|self.employ|solopreneur|independent)\b/i, safe: 'laptop coffee shop' },
+        { match: /\b(email|communicat|writing|grammar)\b/i,             safe: 'person typing laptop' },
+        { match: /\b(budget|financ|money|invoic|accounting)\b/i,        safe: 'notebook calculator desk' },
+        { match: /\b(brand|market|social media|content)\b/i,            safe: 'creative workspace whiteboard' },
+        { match: /\b(seo|blog|keyword|traffic)\b/i,                     safe: 'person writing notebook' },
+        { match: /\b(remote|work from home|distributed)\b/i,            safe: 'home office desk setup' },
+        { match: /\b(student|learn|educat|course)\b/i,                  safe: 'student studying books' },
+        { match: /\b(small business|entrepreneur|startup)\b/i,          safe: 'small business owner working' },
+      ];
+      var safeQuery = 'professional workspace';
+      for (var i = 0; i < topicMap.length; i++) {
+        if (topicMap[i].match.test(article.keyword || '')) {
+          safeQuery = topicMap[i].safe;
+          break;
+        }
+      }
+      var searchTerm = encodeURIComponent(safeQuery);
       var pexelsRes = await new Promise(function(resolve, reject) {
         var req = https.request({
           hostname: 'api.pexels.com',
-          path: '/v1/search?query=' + searchTerm + '&per_page=1&orientation=landscape',
+          path: '/v1/search?query=' + searchTerm + '&per_page=5&orientation=landscape',
           method: 'GET',
           headers: { Authorization: pexelsKey }
         }, function(res) {
@@ -623,14 +642,14 @@ async function runReporter(article) {
         req.end();
       });
       if (pexelsRes.photos && pexelsRes.photos.length) {
-        coverUrl = pexelsRes.photos[0].src.large2x;
-        log('[P3] Cover image: ' + coverUrl);
+        var pick = pexelsRes.photos[Math.floor(Math.random() * pexelsRes.photos.length)];
+        coverUrl = pick.src.large2x;
+        log('[P3] Cover image (' + safeQuery + '): ' + coverUrl);
       }
     }
   } catch(e) {
     log('[P3] Pexels failed: ' + e.message + ' — continuing without cover');
   }
-
   // Step 2: Build body with cover image embedded as first line
   var body = article.body_markdown;
   if (coverUrl) {
