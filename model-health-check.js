@@ -338,6 +338,74 @@ async function runHealthCheck(triggeredBy = 'scheduled') {
     console.error('[health-check] Failed to save models.json:', e.message);
   }
 
+  // Push models.json back to GitHub if any models were auto-replaced
+  const changedCheck = results.filter(r => r.changed);
+  if (changedCheck.length > 0) {
+    try {
+      const githubToken = process.env.GITHUB_TOKEN;
+      const repo = process.env.GITHUB_WORKSPACE_REPO;
+      if (githubToken && repo) {
+        const fileContent = fs.readFileSync(MODELS_PATH, 'utf8');
+        const encoded = Buffer.from(fileContent).toString('base64');
+        // Get current SHA
+        const shaRes = await new Promise((resolve, reject) => {
+          const req = https.request({
+            hostname: 'api.github.com',
+            path: `/repos/${repo}/contents/models.json`,
+            method: 'GET',
+            headers: {
+              'Authorization': `token ${githubToken}`,
+              'User-Agent': 'bootstrapclaw',
+              'Accept': 'application/vnd.github.v3+json'
+            }
+          }, res => {
+            let d = '';
+            res.on('data', c => d += c);
+            res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve({}); } });
+          });
+          req.on('error', reject);
+          req.end();
+        });
+        const sha = shaRes.sha;
+        if (!sha) throw new Error('Could not get SHA from GitHub');
+        // Push updated file
+        const pushRes = await new Promise((resolve, reject) => {
+          const body = JSON.stringify({
+            message: `auto: health-check updated ${changedCheck.length} model(s)`,
+            content: encoded,
+            sha: sha
+          });
+          const req = https.request({
+            hostname: 'api.github.com',
+            path: `/repos/${repo}/contents/models.json`,
+            method: 'PUT',
+            headers: {
+              'Authorization': `token ${githubToken}`,
+              'User-Agent': 'bootstrapclaw',
+              'Accept': 'application/vnd.github.v3+json',
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(body)
+            }
+          }, res => {
+            let d = '';
+            res.on('data', c => d += c);
+            res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { resolve({}); } });
+          });
+          req.on('error', reject);
+          req.write(body);
+          req.end();
+        });
+        if (pushRes.commit) {
+          console.log('[health-check] models.json pushed to GitHub — commit: ' + pushRes.commit.sha.slice(0, 7));
+        } else {
+          console.error('[health-check] GitHub push failed:', JSON.stringify(pushRes).slice(0, 200));
+        }
+      }
+    } catch (e) {
+      console.error('[health-check] GitHub sync failed:', e.message);
+    }
+  }
+
   // Build Telegram report
   const changed = results.filter(r => r.changed);
   const dead = results.filter(r => r.status === 'dead');
