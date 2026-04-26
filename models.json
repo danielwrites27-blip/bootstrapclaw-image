@@ -67,7 +67,7 @@
     "endpoint": "https://api.groq.com/openai/v1",
     "apiKeyEnv": "GROQ_API_KEY",
     "responseType": "openai",
-    "current": "llama-3.3-70b-versatile",
+    "current": "llama-3.1-8b-instant",
     "preferred": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama-3.1-8b-instant"],
     "last_verified": null,
     "status": "unknown"
