@@ -389,6 +389,69 @@ function markTopicUsed(keyword) {
     });
     fs.writeFileSync(IDEAS, filtered.join('\n'));
   } catch(e) {}
+  // Auto-refresh queue if running low
+  autoRefreshQueue().catch(function(e) { log('[queue] refresh error: ' + e.message); });
+}
+
+async function autoRefreshQueue() {
+  try {
+    // Read current queue
+    var ideas = [];
+    try {
+      ideas = fs.readFileSync(IDEAS, 'utf8').trim().split('\n')
+        .filter(function(l) { return l.trim() && !l.startsWith('#'); });
+    } catch(e) {}
+    if (ideas.length >= 10) return; // Queue healthy, nothing to do
+
+    log('[queue] Only ' + ideas.length + ' keywords left — auto-refreshing...');
+    await send('🔄 Keyword queue low (' + ideas.length + ' left) — generating 20 fresh topics...');
+
+    // Build full history context from used-topics.txt
+    var usedTopics = '';
+    try { usedTopics = fs.readFileSync(USED, 'utf8').trim(); } catch(e) {}
+
+    // Build full title history from runs.log
+    var usedTitles = '';
+    try {
+      var runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8'));
+      usedTitles = runs.map(function(r) { return r.title; }).filter(Boolean).join('\n');
+    } catch(e) {}
+
+    // Build existing queue list to avoid duplicates
+    var existingQueue = ideas.map(function(l) {
+      return l.replace(/^[-*]\s*/, '').trim().toLowerCase();
+    });
+
+    var prompt = 'Generate exactly 20 fresh article keyword ideas for a blog targeting freelancers, remote workers, solopreneurs, and small business owners. Focus on practical tools, productivity, AI, income streams, career growth, and business skills.\n\n' +
+      'Already published keywords — do NOT repeat or closely reword these:\n' + usedTopics + '\n\n' +
+      'Already published article titles — do NOT cover the same angles:\n' + usedTitles + '\n\n' +
+      'Return ONLY a plain list of 20 keywords, one per line, no numbering, no bullets, no explanation. Each keyword should be a distinct, specific topic not covered above.';
+
+    var result = await callLLM('orchestrator', [{ role: 'user', content: prompt }], 500);
+    if (!result || !result.content) throw new Error('No content from LLM');
+
+    // Filter: remove too-short, already published, already in queue, semantically similar
+    var newKeywords = result.content.trim().split('\n')
+      .map(function(l) { return l.replace(/^[-*\d.]\s*/, '').trim().toLowerCase(); })
+      .filter(function(l) {
+        if (l.length < 5) return false;
+        if (existingQueue.includes(l)) return false;
+        if (isTopicUsed(l).used) return false;
+        return true;
+      });
+
+    if (!newKeywords.length) throw new Error('No valid keywords generated after filtering');
+
+    // Append to article-ideas.md
+    fs.appendFileSync(IDEAS, '\n' + newKeywords.join('\n'));
+    log('[queue] Added ' + newKeywords.length + ' fresh keywords to queue');
+    await send('✅ Queue refreshed — ' + newKeywords.length + ' new keywords added:\n' +
+      newKeywords.slice(0, 5).join('\n') + '\n...and ' + Math.max(0, newKeywords.length - 5) + ' more');
+
+  } catch(e) {
+    log('[queue] Auto-refresh failed: ' + e.message);
+    await send('⚠️ Queue auto-refresh failed: ' + e.message);
+  }
 }
 
 async function handleRun(keyword) {
