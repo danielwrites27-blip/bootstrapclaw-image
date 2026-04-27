@@ -646,7 +646,7 @@ PASS 1 — Fix these patterns:
 7. Em dashes: replace all — with a comma or period
 8. Citation markers: remove [1] [2] [3] style markers
 9. Boldface overuse: remove bold markdown from mid-sentence emphasis
-10. Title case headings: convert ALL headings to sentence case (first word and proper nouns only)
+10. Headings: convert ALL headings to sentence case (first word and proper nouns only) — IMPORTANT: keep the ### markdown prefix exactly as-is, only change the text after ###
 11. Summary ending: if the article ends with a Recommended tools or Key takeaways section, delete it and replace with one direct opinion paragraph about what actually matters
 
 PASS 2 — Self-audit:
@@ -680,6 +680,19 @@ RULES:
     return article;
   }
   parsed.body_markdown = parsed.body_markdown.replace(/—/g, ' - ');
+  // Restore ### headings if humanizer converted them to bold
+  var origHeadings = (article.body_markdown.match(/^#{2,}\s+.+/gm) || []);
+  var newHeadings = (parsed.body_markdown.match(/^#{2,}\s+.+/gm) || []);
+  if (origHeadings.length > 0 && newHeadings.length === 0) {
+    log('[P2.5] Humanizer stripped headings — restoring ' + origHeadings.length + ' headings mechanically');
+    parsed.body_markdown = parsed.body_markdown.replace(/^\*\*([^*]+)\*\*$/gm, function(match, text) {
+      var closest = origHeadings.find(function(h) {
+        var hText = h.replace(/^#+\s+/, '').toLowerCase();
+        return text.toLowerCase().includes(hText.slice(0,15)) || hText.includes(text.toLowerCase().slice(0,15));
+      });
+      return closest ? closest : '### ' + text;
+    });
+  }
   // Mechanical banned phrase strip (same approach as em dash)
   parsed.body_markdown = parsed.body_markdown.replace(/game-changer/gi, 'valuable tool');
   parsed.body_markdown = parsed.body_markdown.replace(/game changer/gi, 'valuable tool');
