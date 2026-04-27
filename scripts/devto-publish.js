@@ -41,7 +41,7 @@ const method = articleId ? 'PUT' : 'POST';
 fetch(url, {
   method,
   headers: { 'api-key': apiKey, 'content-type': 'application/json' },
-  body: JSON.stringify({ article })
+  body: JSON.stringify({ article: Object.assign({ published: true }, article) })
 })
 .then(r => r.json())
 .then(data => {
