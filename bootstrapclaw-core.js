@@ -960,7 +960,7 @@ function runValidator(research, article, devtoUrl) {
       for (var i = 0; i < bodyLinks.length; i++) {
         try {
           var domain = new URL(bodyLinks[i]).hostname.replace('www.','');
-          if (!researchDomains.has(domain) && !domain.includes('amazon.') && !domain.includes('customgpt.') && !domain.includes('example.com')) {
+          if (!researchDomains.has(domain) && !domain.includes('amazon.') && !domain.includes('customgpt.') && !domain.includes('example.com') && !domain.includes('pexels.com') && !domain.includes('unsplash.com')) {
             var namedInBody = body.toLowerCase().includes(domain.split('.')[0]);
             if (namedInBody && !researchDomains.has(domain)) return false;
           }
