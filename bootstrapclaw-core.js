@@ -427,7 +427,7 @@ async function autoRefreshQueue() {
       'Already published article titles — do NOT cover the same angles:\n' + usedTitles + '\n\n' +
       'Return ONLY a plain list of 20 keywords, one per line, no numbering, no bullets, no explanation. Each keyword should be a distinct, specific topic not covered above.';
 
-    var result = await callLLM('orchestrator', [{ role: 'user', content: prompt }], 500);
+    var result = await callLLM('orchestrator', 'You are a content strategist generating fresh article keyword ideas for a blog.', prompt, { maxTokens: 500 });
     if (!result || !result.content) throw new Error('No content from LLM');
 
     // Filter: remove too-short, already published, already in queue, semantically similar
