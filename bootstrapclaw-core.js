@@ -536,7 +536,7 @@ async function runWriter(research) {
   }
   var sys = 'You are an expert content writer. Write a high-quality, engaging article based on the research provided.\nRules:\n- Minimum 900 words\n- Start with a specific statistic or named study — never an emotional statement\n- Use short paragraphs (2-3 sentences max)\n- No em dashes anywhere\n- No phrases like: by leveraging, in conclusion, game-changer, dive into, what matters most\n- Include inline links using markdown: [anchor text](url)' + affiliateInstruction + '\n- Output ONLY valid JSON — no markdown fences, no explanation';
 
-  var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
+  var usr = 'Research:\n' + JSON.stringify(research, null, 2) + '\n\nWrite the article and return this exact JSON:\n{\n  "title": "article title",\n  "description": "meta description under 160 chars",\n  "tags": ["tag1","tag2","tag3","tag4"],\n  "seo_title": "SEO title under 60 chars with main keyword",\n  "seo_description": "SEO description 140-156 chars, includes keyword, summarizes article value",\n  "medium_tags": ["Tag1","Tag2","Tag3","Tag4","Tag5"],\n  "body_markdown": "full article in markdown, 900+ words"\n}';
 
   var { jsonrepair } = require('jsonrepair');
   var article, result, wordCount;
