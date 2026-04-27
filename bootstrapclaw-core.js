@@ -947,7 +947,7 @@ function runValidator(research, article, devtoUrl) {
     // ── NEW CHECK 8: Opening contains a statistic ──────────────────────────
     opens_with_statistic: (function() {
       var firstPara = body.split('\n\n').find(function(p) { return p.trim() && !p.trim().startsWith('!') && !p.trim().startsWith('###'); }) || '';
-      return /\d+(%|million|billion|thousand|x |times|percent|study|report|survey|research|according)/i.test(firstPara);
+      return /\d+(%|million|billion|thousand|x |times|percent|study|report|survey|research|according)/i.test(firstPara) || /\bover\s+[\d,]+|\bnearly\s+[\d,]+|\b[\d,]+\s+(bloggers|users|companies|businesses|people|professionals|freelancers|workers|respondents)/i.test(firstPara);
     })(),
 
     // ── NEW CHECK 9: No hallucinated sources ──────────────────────────────
