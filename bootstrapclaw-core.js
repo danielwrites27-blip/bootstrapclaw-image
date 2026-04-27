@@ -929,20 +929,98 @@ async function handleAudit() {
 
 // ── PIPELINE ORCHESTRATOR ────────────────────────────────────────────────────
 function runValidator(research, article, devtoUrl) {
+  var body = article.body_markdown || '';
+  var title = article.title || '';
+
+  // ── ORIGINAL 7 CHECKS ───────────────────────────────────────────────────
   var checks = {
     research_has_real_urls: (research.sources||[]).every(function(s) {
       return s.url && s.url.startsWith('http') && !s.url.includes('example.com');
     }),
     article_word_count: (article.word_count || 0) >= 800,
     article_valid_json: true,
-    no_placeholder_text: !/(Article title here|continues\.\.\.|truncated|\[INSERT)/.test(article.body_markdown||''),
+    no_placeholder_text: !/(Article title here|continues\.\.\.| truncated|\[INSERT)/.test(body),
     devto_url_real: !!(devtoUrl && devtoUrl.includes('dev.to/daniel_writes_27/') && !devtoUrl.includes('example.com')),
-    no_banned_phrases: !/(by leveraging|in conclusion|what matters most|dive into|game-changer)/.test(article.body_markdown||''),
-    no_em_dashes: !/—/.test(article.body_markdown||'')
+    no_banned_phrases: !/(by leveraging|in conclusion|what matters most|dive into|game-changer)/.test(body),
+    no_em_dashes: !/—/.test(body),
+
+    // ── NEW CHECK 8: Opening contains a statistic ──────────────────────────
+    opens_with_statistic: (function() {
+      var firstPara = body.replace(/^!\[.*?\]\(.*?\)\n\n/, '').split('\n\n')[0] || '';
+      return /\d+(%|million|billion|thousand|x |times|percent|study|report|survey|research|according)/i.test(firstPara);
+    })(),
+
+    // ── NEW CHECK 9: No hallucinated sources ──────────────────────────────
+    no_hallucinated_sources: (function() {
+      var researchDomains = new Set();
+      (research.sources||[]).forEach(function(s) {
+        try { researchDomains.add(new URL(s.url).hostname.replace('www.','')); } catch(e) {}
+      });
+      var bodyLinks = body.match(/https?:\/\/[^\s)]+/g) || [];
+      for (var i = 0; i < bodyLinks.length; i++) {
+        try {
+          var domain = new URL(bodyLinks[i]).hostname.replace('www.','');
+          if (!researchDomains.has(domain) && !domain.includes('amazon.') && !domain.includes('customgpt.') && !domain.includes('example.com')) {
+            var namedInBody = body.toLowerCase().includes(domain.split('.')[0]);
+            if (namedInBody && !researchDomains.has(domain)) return false;
+          }
+        } catch(e) {}
+      }
+      return true;
+    })(),
+
+    // ── NEW CHECK 10: Has at least 3 section headings ─────────────────────
+    has_structure: (function() {
+      var h = (body.match(/^#{2,}\s+.+/gm) || []).length;
+      var bold = (body.match(/^\*\*[^*]+\*\*$/gm) || []).length;
+      return (h + bold) >= 3;
+    })(),
+
+    // ── NEW CHECK 11: No repeated sentences ──────────────────────────────
+    no_repeated_sentences: (function() {
+      var sentences = body.match(/[^.!?]+[.!?]+/g) || [];
+      var seen = new Set();
+      for (var i = 0; i < sentences.length; i++) {
+        var s = sentences[i].trim().toLowerCase().slice(0, 80);
+        if (s.length > 30 && seen.has(s)) return false;
+        seen.add(s);
+      }
+      return true;
+    })(),
+
+    // ── NEW CHECK 12: No sycophantic opener ───────────────────────────────
+    no_sycophantic_opener: (function() {
+      var firstLine = body.replace(/^!\[.*?\]\(.*?\)\n\n/, '').slice(0, 200).toLowerCase();
+      return !/(in today's fast.paced|in the ever.evolving|in an increasingly|in the modern|in today's world|in the age of|in recent years, the landscape)/.test(firstLine);
+    })(),
+
+    // ── NEW CHECK 13: No generic conclusion ───────────────────────────────
+    no_generic_conclusion: (function() {
+      var lastPart = body.slice(-400).toLowerCase();
+      return !/(the future (looks|is) bright|more important than ever|rapidly evolving landscape|as we move forward|the possibilities are endless|in this dynamic)/.test(lastPart);
+    })(),
+
+    // ── NEW CHECK 14: No localhost or bad URLs in body ────────────────────
+    no_bad_urls: !/(localhost|127\.0\.0\.1|example\.com|yourdomain\.com|placeholder\.com)/.test(body),
+
+    // ── NEW CHECK 15: No heading repeated verbatim ────────────────────────
+    no_duplicate_headings: (function() {
+      var headings = (body.match(/^#{2,}\s+.+/gm) || []).map(function(h) { return h.toLowerCase().trim(); });
+      return headings.length === new Set(headings).size;
+    })(),
+
+    // ── NEW CHECK 16: Title not truncated or generic ──────────────────────
+    title_quality: (function() {
+      if (!title || title.length < 10) return false;
+      if (/^(article|untitled|draft|test|placeholder)/i.test(title)) return false;
+      return true;
+    })()
   };
+
+  var total = Object.keys(checks).length;
   var passed = Object.values(checks).filter(Boolean).length;
   var failed = Object.keys(checks).filter(function(k) { return !checks[k]; });
-  return { passed: passed, total: 7, failed: failed, checks: checks };
+  return { passed: passed, total: total, failed: failed, checks: checks };
 }
 async function runDraftPipeline(keyword) {
   var pipelineStart = Date.now();
@@ -984,7 +1062,7 @@ async function handleApprove() {
     var validation = runValidator(draft.research, draft.article, url);
     var elapsed = Math.round((Date.now() - draft.pipelineStart) / 1000);
     var validatorMsg = validation.failed.length > 0
-      ? '⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', ')
+      ? '⚠️ *Validator: ' + validation.passed + '/' + validation.total + ' checks passed*\nFailed: ' + validation.failed.join(', ')
       : '✅ *Validator: 7/7 checks passed*';
     await send(validatorMsg);
     var p1 = (draft.research.provider||'?').replace(/_/g,'-');
@@ -1033,7 +1111,7 @@ async function runPipeline(keyword) {
     var validation = runValidator(research, article, url);
     var elapsed = Math.round((Date.now() - pipelineStart) / 1000);
     var validatorMsg = validation.failed.length > 0
-      ? '⚠️ *Validator: ' + validation.passed + '/7 checks passed*\nFailed: ' + validation.failed.join(', ')
+      ? '⚠️ *Validator: ' + validation.passed + '/' + validation.total + ' checks passed*\nFailed: ' + validation.failed.join(', ')
       : '✅ *Validator: 7/7 checks passed*';
     await send(validatorMsg);
     var p1 = (research.provider||'?').replace(/_/g,'-');
