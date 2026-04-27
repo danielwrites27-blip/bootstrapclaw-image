@@ -318,8 +318,40 @@ function writeRunLog(entry) {
 }
 
 // ── COMMAND HANDLERS ─────────────────────────────────────────────────────────
+async function handleCrosspost(arg) {
+  try {
+    var runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8'));
+    var published = runs.filter(function(r) { return r.status === 'published' && r.url; }).reverse();
+    if (!published.length) { await send('No published articles found.'); return; }
+    // Mode 2: /crosspost N — return metadata for article N
+    if (arg) {
+      var idx = parseInt(arg) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= published.length) {
+        await send('Invalid number. Use /crosspost to see the list.');
+        return;
+      }
+      var r = published[idx];
+      var tags = Array.isArray(r.medium_tags) ? r.medium_tags.join(', ') : (r.medium_tags || 'not available');
+      var msg = '📋 *Cross-post metadata*\n\n' +
+        '*TITLE:*\n' + (r.title||'') + '\n\n' +
+        '*SEO TITLE:*\n' + (r.seo_title||'not available — old article') + '\n\n' +
+        '*SEO DESCRIPTION:*\n' + (r.seo_description||'not available — old article') + '\n\n' +
+        '*MEDIUM TAGS:*\n' + tags + '\n\n' +
+        '*CANONICAL URL:*\n' + (r.url||'') + '\n\n' +
+        '📱 [Open Medium new story](https://medium.com/new-story)';
+      await send(msg);
+      return;
+    }
+    // Mode 1: /crosspost — list last 10 published articles
+    var list = published.slice(0, 10).map(function(r, i) {
+      var date = r.timestamp ? r.timestamp.slice(0,10) : '';
+      return (i+1) + '. ' + (r.title||'').slice(0,50) + '... (' + date + ')';
+    }).join('\n');
+    await send('📋 *Choose an article to cross-post:*\n\n' + list + '\n\nReply: /crosspost [number]');
+  } catch(e) { await send('Could not read runs.log: ' + e.message); }
+}
 async function handleStatus() {
-  await send('🦞 *BootstrapClaw Status*\n\n*Pipeline:* ' + pipelineStatus + '\n*Keyword:* ' + (currentKeyword || 'none') + '\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Cerebras RPD:* ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() + ' remaining' : 'unknown') + '\n*Last run:* ' + getLastRun() + '\n\n/run [keyword] — start pipeline\n/status — this message\n/health — system check\n/logs — last 5 runs');
+  await send('🦞 *BootstrapClaw Status*\n\n*Pipeline:* ' + pipelineStatus + '\n*Keyword:* ' + (currentKeyword || 'none') + '\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Cerebras RPD:* ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() + ' remaining' : 'unknown') + '\n*Last run:* ' + getLastRun() + '\n\n*Commands:*\n/run [keyword] — auto publish\n/draft [keyword] — write and hold for review\n/approve — publish held draft\n/reject — discard held draft\n/pause — pause pipeline\n/resume — resume pipeline\n/crosspost — list articles for Medium\n/status — this message\n/health — full provider health check\n/logs — last 5 runs');
 }
 
 async function handleHealth() {
@@ -823,7 +855,7 @@ async function handleApprove() {
     var p25 = (draft.article.humanizer_provider||'groq-kimi').replace(/_/g,'-');
     await send('📊 *Run Summary*\n' + elapsed + 's total\nP1: ' + p1 + '\nP2: ' + p2 + '\nP2.5: ' + p25 + '\nWords: ' + draft.article.word_count + '\nCerebras RPD: ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() : 'not used'));
     markTopicUsed(draft.keyword);
-    writeRunLog({ keyword: draft.keyword, status: 'published', title: draft.article.title, words: draft.article.word_count, url: url, validator: validation });
+    writeRunLog({ keyword: draft.keyword, status: 'published', title: draft.article.title, words: draft.article.word_count, url: url, validator: validation, seo_title: draft.article.seo_title||'', seo_description: draft.article.seo_description||'', medium_tags: draft.article.medium_tags||[] });
     pipelineStatus = 'idle';
     currentKeyword = null;
   } catch(err) {
@@ -864,7 +896,7 @@ async function runPipeline(keyword) {
     var p25 = (article.humanizer_provider||'groq-kimi').replace(/_/g,'-');
     await send('📊 *Run Summary*\n' + elapsed + 's total\nP1: ' + p1 + '\nP2: ' + p2 + '\nP2.5: ' + p25 + '\nWords: ' + article.word_count + '\nCerebras RPD: ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() : 'not used'));
     markTopicUsed(keyword);
-    writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation });
+    writeRunLog({ keyword: keyword, status: 'published', title: article.title, words: article.word_count, url: url, validator: validation, seo_title: article.seo_title||'', seo_description: article.seo_description||'', medium_tags: article.medium_tags||[] });
     pipelineStatus = 'idle';
     currentKeyword = null;
   } catch(err) {
@@ -884,6 +916,7 @@ async function dispatch(text) {
   if (t.startsWith('/run'))    return handleRun(t.replace('/run', '').trim());
   if (t.startsWith('/draft'))  return handleDraft(t.replace('/draft', '').trim());
   if (t === '/approve')        return handleApprove();
+  if (t.startsWith('/crosspost')) return handleCrosspost(t.replace('/crosspost','').trim());
   if (t === '/reject')         return handleReject();
   if (t === '/restart')        { await send('♻️ Restarting...'); process.exit(0); }
   if (t === '/pause')          { paused = true;  await send('Pipeline paused. Send /resume to re-enable.'); return; }
