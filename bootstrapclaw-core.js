@@ -820,7 +820,7 @@ function runContentQualityCheck(article) {
   if (dupCount >= 3) issues.push('repetition_loop (' + dupCount + ' duplicate paragraph pairs)');
 
   // Check 2: Thin content — fewer than 3 sections
-  var headings = (body.match(/^##\s+.+/gm) || []).length;
+  var headings = (body.match(/^#{2,}\s+.+/gm) || []).length;
   if (headings < 3) issues.push('thin_content (only ' + headings + ' sections)');
 
   // Check 3: Title/section number mismatch
