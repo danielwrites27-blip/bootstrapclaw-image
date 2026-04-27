@@ -963,7 +963,7 @@ function runValidator(research, article, devtoUrl) {
           if (!researchDomains.has(domain) && !domain.includes('amazon.') && !domain.includes('customgpt.') && !domain.includes('example.com') && !domain.includes('pexels.com') && !domain.includes('unsplash.com')) {
             // Whitelist trusted high-authority domains LLMs commonly cite legitimately
             var trustedDomains = ['gallup.com','forbes.com','harvard.edu','hbr.org','mckinsey.com','statista.com','gartner.com','pewresearch.org','techcrunch.com','wired.com','nytimes.com','wsj.com','bloomberg.com','reuters.com','bbc.com','economist.com','nerdwallet.com','businessinsider.com','cnbc.com','linkedin.com','wikipedia.org','gov','edu'];
-            if (trustedDomains.some(function(t){ return domain.includes(t); })) continue; {
+            if (trustedDomains.some(function(t){ return domain.includes(t); })) return; // skip trusted domains
             var namedInBody = body.toLowerCase().includes(domain.split('.')[0]);
             if (namedInBody && !researchDomains.has(domain)) return false;
           }
