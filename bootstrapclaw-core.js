@@ -693,6 +693,22 @@ RULES:
       return closest ? closest : '### ' + text;
     });
   }
+  // If headings still missing after restoration attempt, force-inject at paragraph boundaries
+  var restoredHeadings = (parsed.body_markdown.match(/^#{2,}\s+.+/gm) || []);
+  if (origHeadings.length > 0 && restoredHeadings.length === 0) {
+    log('[P2.5] Force-injecting ' + origHeadings.length + ' original headings into humanized body');
+    var paragraphs = parsed.body_markdown.split(/\n\n+/).filter(function(p) { return p.trim(); });
+    var step = Math.max(1, Math.floor(paragraphs.length / (origHeadings.length + 1)));
+    var result = [];
+    var hIdx = 0;
+    for (var pi = 0; pi < paragraphs.length; pi++) {
+      if (hIdx < origHeadings.length && pi > 0 && pi % step === 0) {
+        result.push(origHeadings[hIdx++]);
+      }
+      result.push(paragraphs[pi]);
+    }
+    parsed.body_markdown = result.join('\n\n');
+  }
   // Mechanical banned phrase strip (same approach as em dash)
   parsed.body_markdown = parsed.body_markdown.replace(/game-changer/gi, 'valuable tool');
   parsed.body_markdown = parsed.body_markdown.replace(/game changer/gi, 'valuable tool');
@@ -833,7 +849,7 @@ function runContentQualityCheck(article) {
   if (dupCount >= 3) issues.push('repetition_loop (' + dupCount + ' duplicate paragraph pairs)');
 
   // Check 2: Thin content — fewer than 3 sections
-  var headings = (body.match(/^#{2,}\s+.+/gm) || []).length;
+  var headings = (body.match(/^#{2,}\s+.+/gm) || []).length + (body.match(/^\*\*[^*]+\*\*$/gm) || []).length;
   if (headings < 3) issues.push('thin_content (only ' + headings + ' sections)');
 
   // Check 3: Title/section number mismatch
