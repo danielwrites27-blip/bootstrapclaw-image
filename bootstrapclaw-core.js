@@ -946,7 +946,7 @@ function runValidator(research, article, devtoUrl) {
 
     // ── NEW CHECK 8: Opening contains a statistic ──────────────────────────
     opens_with_statistic: (function() {
-      var firstPara = body.replace(/^!\[.*?\]\(.*?\)\n\n/, '').split('\n\n')[0] || '';
+      var firstPara = body.split('\n\n').find(function(p) { return p.trim() && !p.trim().startsWith('!') && !p.trim().startsWith('###'); }) || '';
       return /\d+(%|million|billion|thousand|x |times|percent|study|report|survey|research|according)/i.test(firstPara);
     })(),
 
