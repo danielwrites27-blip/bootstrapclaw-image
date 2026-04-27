@@ -648,6 +648,13 @@ RULES:
     return article;
   }
   parsed.body_markdown = parsed.body_markdown.replace(/—/g, ' - ');
+  // Mechanical banned phrase strip (same approach as em dash)
+  parsed.body_markdown = parsed.body_markdown.replace(/game-changer/gi, 'valuable tool');
+  parsed.body_markdown = parsed.body_markdown.replace(/game changer/gi, 'valuable tool');
+  parsed.body_markdown = parsed.body_markdown.replace(/dive into/gi, 'explore');
+  parsed.body_markdown = parsed.body_markdown.replace(/by leveraging/gi, 'using');
+  parsed.body_markdown = parsed.body_markdown.replace(/in conclusion/gi, 'to summarize');
+  parsed.body_markdown = parsed.body_markdown.replace(/what matters most/gi, 'the key priority');
   var wordCount = parsed.body_markdown.split(/\s+/).filter(Boolean).length;
   log('[P2.5] Humanized: ' + wordCount + ' words, provider: ' + result.provider);
   article.humanizer_provider = result.provider;
