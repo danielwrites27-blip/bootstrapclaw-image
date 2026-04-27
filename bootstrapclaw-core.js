@@ -351,7 +351,7 @@ async function handleCrosspost(arg) {
   } catch(e) { await send('Could not read runs.log: ' + e.message); }
 }
 async function handleStatus() {
-  await send('🦞 *BootstrapClaw Status*\n\n*Pipeline:* ' + pipelineStatus + '\n*Keyword:* ' + (currentKeyword || 'none') + '\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Cerebras RPD:* ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() + ' remaining' : 'unknown') + '\n*Last run:* ' + getLastRun() + '\n\n*Commands:*\n/run [keyword] — auto publish\n/draft [keyword] — write and hold for review\n/approve — publish held draft\n/reject — discard held draft\n/pause — pause pipeline\n/resume — resume pipeline\n/crosspost — list articles for Medium\n/status — this message\n/health — full provider health check\n/logs — last 5 runs');
+  await send('🦞 *BootstrapClaw Status*\n\n*Pipeline:* ' + pipelineStatus + '\n*Keyword:* ' + (currentKeyword || 'none') + '\n*RAM:* ' + getRam() + '\n*Disk:* ' + getDisk() + '\n*Cerebras RPD:* ' + (cerebrasRPD !== null ? cerebrasRPD.toLocaleString() + ' remaining' : 'unknown') + '\n*Last run:* ' + getLastRun() + '\n\n*Commands:*\n/run [keyword] — auto publish\n/draft [keyword] — write and hold for review\n/approve — publish held draft\n/reject — discard held draft\n/pause — pause pipeline\n/resume — resume pipeline\n/crosspost — list articles for Medium\n/audit — quality check all Dev.to articles\n/status — this message\n/health — full provider health check\n/logs — last 5 runs');
 }
 
 async function handleHealth() {
@@ -797,6 +797,107 @@ async function runReporter(article) {
   return articleUrl;
 }
 
+
+// ── CONTENT QUALITY CHECK ────────────────────────────────────────────────────
+function runContentQualityCheck(article) {
+  var body = article.body_markdown || '';
+  var title = article.title || '';
+  var issues = [];
+
+  // Check 1: Repetition detection — split into paragraphs, compare word overlap
+  var paras = body.split(/\n\n+/).map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 80; });
+  var dupCount = 0;
+  for (var i = 0; i < paras.length; i++) {
+    for (var j = i + 1; j < paras.length; j++) {
+      var wordsA = paras[i].toLowerCase().split(/\s+/);
+      var wordsB = paras[j].toLowerCase().split(/\s+/);
+      var setA = new Set(wordsA);
+      var overlap = wordsB.filter(function(w) { return setA.has(w); }).length;
+      var similarity = overlap / Math.max(wordsA.length, wordsB.length);
+      if (similarity > 0.6) dupCount++;
+    }
+  }
+  if (dupCount >= 3) issues.push('repetition_loop (' + dupCount + ' duplicate paragraph pairs)');
+
+  // Check 2: Thin content — fewer than 3 sections
+  var headings = (body.match(/^##\s+.+/gm) || []).length;
+  if (headings < 3) issues.push('thin_content (only ' + headings + ' sections)');
+
+  // Check 3: Title/section number mismatch
+  var titleNumMatch = title.match(/\b(\d+)\s+(step|tip|way|strateg|reason|thing|method|tool)/i);
+  if (titleNumMatch) {
+    var titleNum = parseInt(titleNumMatch[1]);
+    if (Math.abs(headings - titleNum) > 1) {
+      issues.push('title_mismatch (title says ' + titleNum + ' but found ' + headings + ' sections)');
+    }
+  }
+
+  // Check 4: Ending repetition — last 20% of article vs first 60%
+  var cutA = Math.floor(body.length * 0.6);
+  var cutB = Math.floor(body.length * 0.8);
+  var firstPart = body.slice(0, cutA).toLowerCase().split(/\s+/);
+  var lastPart = body.slice(cutB).toLowerCase().split(/\s+/);
+  if (lastPart.length > 30) {
+    var firstSet = new Set(firstPart);
+    var endOverlap = lastPart.filter(function(w) { return firstSet.has(w); }).length / lastPart.length;
+    if (endOverlap > 0.85 && lastPart.length > 80) issues.push('padding_detected (ending repeats opening content)');
+  }
+
+  return { passed: issues.length === 0, issues: issues };
+}
+
+async function handleAudit() {
+  await send('🔍 *Article Audit Started*\nFetching all published articles from Dev.to...');
+  try {
+    var devtoKey = process.env.DEVTO_API_KEY;
+    if (!devtoKey) { await send('DEVTO_API_KEY not set'); return; }
+    // Fetch articles from Dev.to API
+    var articles = await new Promise(function(resolve, reject) {
+      var req = https.request({
+        hostname: 'dev.to',
+        path: '/api/articles/me/published?per_page=30',
+        method: 'GET',
+        headers: { 'api-key': devtoKey, 'User-Agent': 'BootstrapClaw/1.0' }
+      }, function(res) {
+        var d = '';
+        res.on('data', function(c) { d += c; });
+        res.on('end', function() { try { resolve(JSON.parse(d)); } catch(e) { resolve([]); } });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    if (!articles.length) { await send('No published articles found on Dev.to.'); return; }
+    var report = [];
+    var flagged = 0;
+    for (var i = 0; i < articles.length; i++) {
+      var a = articles[i];
+      var fakeArticle = { title: a.title || '', body_markdown: a.body_markdown || '', word_count: a.body_markdown ? a.body_markdown.split(/\s+/).length : 0 };
+      var qc = runContentQualityCheck(fakeArticle);
+      if (qc.passed) {
+        report.push('✅ ' + (a.title||'').slice(0,45) + '...');
+      } else {
+        report.push('⚠️ ' + (a.title||'').slice(0,45) + '...\n   Issues: ' + qc.issues.join(', '));
+        flagged++;
+      }
+    }
+    var summary = '🔍 *Audit Complete — ' + articles.length + ' articles checked*\n' + flagged + ' flagged / ' + (articles.length - flagged) + ' clean\n\n' + report.join('\n');
+    // Split if too long for Telegram
+    if (summary.length > 3800) {
+      var chunks = [];
+      var lines = summary.split('\n');
+      var chunk = '';
+      for (var l = 0; l < lines.length; l++) {
+        if ((chunk + lines[l]).length > 3500) { chunks.push(chunk); chunk = ''; }
+        chunk += lines[l] + '\n';
+      }
+      if (chunk) chunks.push(chunk);
+      for (var c = 0; c < chunks.length; c++) await send(chunks[c]);
+    } else {
+      await send(summary);
+    }
+  } catch(e) { await send('Audit failed: ' + e.message); }
+}
+
 // ── PIPELINE ORCHESTRATOR ────────────────────────────────────────────────────
 function runValidator(research, article, devtoUrl) {
   var checks = {
@@ -824,6 +925,13 @@ async function runDraftPipeline(keyword) {
     await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
     article = await runHumanizer(article);
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
+    var qcDraft = runContentQualityCheck(article);
+    if (!qcDraft.passed) {
+      log('[quality] Draft issues: ' + qcDraft.issues.join(', '));
+      await send('⚠️ *Quality Check:* ' + qcDraft.issues.join(', ') + '\nReview carefully before approving.');
+    } else {
+      await send('✅ *Quality Check: passed*');
+    }
     pendingDraft = { article: article, research: research, keyword: keyword, pipelineStart: pipelineStart };
     pipelineStatus = 'draft_pending';
     var preview = article.body_markdown.replace(/!\[.*?\]\(.*?\)\n\n/, '').slice(0, 300);
@@ -884,6 +992,14 @@ async function runPipeline(keyword) {
     await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
     article = await runHumanizer(article);
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
+    var qcRun = runContentQualityCheck(article);
+    if (!qcRun.passed) {
+      log('[quality] Pipeline issues: ' + qcRun.issues.join(', '));
+      await send('⚠️ *Quality Check failed:* ' + qcRun.issues.join(', ') + '\nBlocking publish — use /draft next time to review.');
+      throw new Error('Quality check failed: ' + qcRun.issues.join(', '));
+    } else {
+      await send('✅ *Quality Check: passed*');
+    }
     var url = await runReporter(article);
     var validation = runValidator(research, article, url);
     var elapsed = Math.round((Date.now() - pipelineStart) / 1000);
@@ -918,6 +1034,7 @@ async function dispatch(text) {
   if (t === '/approve')        return handleApprove();
   if (t.startsWith('/crosspost')) return handleCrosspost(t.replace('/crosspost','').trim());
   if (t === '/reject')         return handleReject();
+  if (t === '/audit')          return handleAudit();
   if (t === '/restart')        { await send('♻️ Restarting...'); process.exit(0); }
   if (t === '/pause')          { paused = true;  await send('Pipeline paused. Send /resume to re-enable.'); return; }
   if (t === '/resume')         { paused = false; await send('Pipeline resumed.'); return; }
