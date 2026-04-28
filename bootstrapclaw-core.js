@@ -592,7 +592,18 @@ async function runWriter(research) {
     if (!article.body_markdown) throw new Error('Writer returned no body');
     article.body_markdown = article.body_markdown.replace(/—/g, ' - ');
     wordCount = article.body_markdown.split(/\s+/).length;
-    if (wordCount >= 800) break;
+    if (wordCount >= 800) {
+      // Check opener has a statistic
+      var firstPara = article.body_markdown.split('\n\n').find(function(p) {
+        return p.trim() && !p.trim().startsWith('!') && !p.trim().startsWith('###');
+      }) || '';
+      var hasStatistic = /\d+(%|million|billion|thousand|x |times|percent|study|report|survey|research|according)/i.test(firstPara) ||
+        /\bover\s+[\d,]+|\bnearly\s+[\d,]+|\b[\d,]+\s+(bloggers|users|companies|businesses|people|professionals|freelancers|workers|respondents)/i.test(firstPara);
+      if (hasStatistic) break;
+      log('[P2] ' + result.provider + ' opener missing statistic, retrying with next provider');
+      excludeProviders.push(result.provider);
+      continue;
+    }
     log('[P2] ' + result.provider + ' returned ' + wordCount + ' words, retrying with next provider');
     excludeProviders.push(result.provider);
   }
