@@ -282,11 +282,10 @@ function send(text) {
   }, Promise.resolve());
 }
 
-async function getUpdates() {
-  var res = await tgRequest('getUpdates', { offset: offset, timeout: 30, allowed_updates: ['message'] });
-  if (!res.ok || !res.result || !res.result.length) return [];
-  offset = res.result[res.result.length - 1].update_id + 1;
-  return res.result;
+async function registerWebhook() {
+  var url = 'https://wright27-bootstrapclaw.hf.space/webhook';
+  var res = await tgRequest('setWebhook', { url: url, allowed_updates: ['message'] });
+  log('[webhook] Register result: ' + JSON.stringify(res));
 }
 
 // ── SYSTEM HELPERS ───────────────────────────────────────────────────────────
@@ -1167,26 +1166,16 @@ async function dispatch(text) {
   await send('Unknown command: ' + t + '\nType /status for help.');
 }
 
-// ── POLL LOOP ────────────────────────────────────────────────────────────────
-async function poll() {
-  while (true) {
-    try {
-      var updates = await getUpdates();
-      for (var i = 0; i < updates.length; i++) {
-        var msg = updates[i].message;
-        if (!msg || !msg.text) continue;
-        if (String(msg.chat.id) !== TG_CHAT) continue;
-        log('CMD: ' + msg.text);
-        dispatch(msg.text).catch(function(err) {
-          log('Dispatch error: ' + err.message);
-          send('❌ ' + err.message).catch(function(){});
-        });
-      }
-    } catch(err) {
-      log('Poll error: ' + err.message);
-      await new Promise(function(r) { setTimeout(r, 5000); });
-    }
-  }
+// ── WEBHOOK HANDLER ──────────────────────────────────────────────────────────
+function handleWebhook(update) {
+  var msg = update.message;
+  if (!msg || !msg.text) return;
+  if (String(msg.chat.id) !== TG_CHAT) return;
+  log('CMD: ' + msg.text);
+  dispatch(msg.text).catch(function(err) {
+    log('Dispatch error: ' + err.message);
+    send('❌ ' + err.message).catch(function(){});
+  });
 }
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
@@ -1196,8 +1185,23 @@ send('🦞 *BootstrapClaw v2 online.*\nType /run [keyword] to start or /status t
 
 // ── HEALTH SERVER (port 7860 for Hugging Face Spaces) ─────────────────────
 http.createServer(function(req, res) {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('BootstrapClaw running');
+  if (req.method === 'POST' && req.url === '/webhook') {
+    var body = '';
+    req.on('data', function(chunk) { body += chunk; });
+    req.on('end', function() {
+      try {
+        var update = JSON.parse(body);
+        handleWebhook(update);
+      } catch(e) {
+        log('[webhook] Parse error: ' + e.message);
+      }
+      res.writeHead(200);
+      res.end('OK');
+    });
+  } else {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('BootstrapClaw running');
+  }
 }).listen(7860, function() {
   log('[health] HTTP server listening on port 7860');
 });
@@ -1279,4 +1283,4 @@ setInterval(function() {
     ).catch(console.error);
   }
 }, 60 * 1000);
-Promise.race([refreshCerebrasRPD(), new Promise(function(r) { setTimeout(r, 12000); })]).catch(function(e) { log('[RPD] Startup check skipped: ' + e.message); }).then(function() { poll(); });
+Promise.race([refreshCerebrasRPD(), new Promise(function(r) { setTimeout(r, 12000); })]).catch(function(e) { log('[RPD] Startup check skipped: ' + e.message); }).then(function() { registerWebhook().catch(console.error); });
