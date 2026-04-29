@@ -177,7 +177,12 @@ var res = await httpPost(currentUrl, { Authorization: 'Bearer ' + apiKey }, {
         log('[LLM] OK ' + key + ' ' + content.length + ' chars');
         return { content: content.trim(), provider: key, model: currentModel };
       }
-      log('[LLM] Empty from ' + key + ': ' + JSON.stringify(res).slice(0,150));
+      var rawResStr = JSON.stringify(res).slice(0,200);
+      if (rawResStr.indexOf('queue_exceeded') !== -1 || rawResStr.indexOf('too_many_requests') !== -1) {
+        log('[LLM] ' + key + ' queue_exceeded — waiting 30s before next provider');
+        await new Promise(function(r) { setTimeout(r, 30000); });
+      }
+      log('[LLM] Empty from ' + key + ': ' + rawResStr);
     } catch(e) {
       log('[LLM] ' + key + ' error: ' + e.message);
     }
@@ -574,7 +579,7 @@ async function runWriter(research) {
   var article, result, wordCount;
   var excludeProviders = [];
   for (var attempt = 0; attempt < 8; attempt++) {
-    result = await callLLM('writer', sys, usr, { minChars: 3500, exclude: excludeProviders });
+    result = await callLLM('writer', sys, usr, { minChars: 2500, exclude: excludeProviders });
     try {
       var cleaned = result.content.replace(/```json/g,'').replace(/```/g,'').trim();
       var start = cleaned.indexOf('{');
@@ -1188,6 +1193,22 @@ async function poll() {
 log('BootstrapClaw starting...');
 fs.mkdirSync(DRAFTS, { recursive: true });
 send('🦞 *BootstrapClaw v2 online.*\nType /run [keyword] to start or /status to check.').catch(console.error);
+
+// ── HEALTH SERVER (port 7860 for Hugging Face Spaces) ─────────────────────
+http.createServer(function(req, res) {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('BootstrapClaw running');
+}).listen(7860, function() {
+  log('[health] HTTP server listening on port 7860');
+});
+// Self-ping every 25 minutes to prevent HF Spaces sleep
+setInterval(function() {
+  http.get('http://localhost:7860/', function(r) {
+    log('[health] Self-ping OK - status ' + r.statusCode);
+  }).on('error', function(e) {
+    log('[health] Self-ping error: ' + e.message);
+  });
+}, 25 * 60 * 1000);
 
 // ── PATTERN ANALYSER ─────────────────────────────────────────────────────────
 function analysePatterns() {
