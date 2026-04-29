@@ -16,7 +16,7 @@ const USED     = BASE_DIR + '/data/used-topics.txt';
 
 if (!TG_TOKEN) { console.error('TELEGRAM_BOT_TOKEN not set'); process.exit(1); }
 
-const { runHealthCheck, MODELS_PATH } = require('./model-health-check');
+// const { runHealthCheck, MODELS_PATH } = require('./model-health-check');
 
 function getModel(key) {
   try {
@@ -380,7 +380,7 @@ async function handleStatus() {
 async function handleHealth() {
   await send('Running full provider health check...');
   try {
-    await runHealthCheck('telegram-/health');
+    await send('⚠️ Health check temporarily disabled — model-health-check under maintenance.');
   } catch(e) {
     await send('Health check error: ' + e.message);
   }
@@ -1281,7 +1281,7 @@ setInterval(function() {
   }
   if (h === 9 && m === 0 && today !== lastHealthCheckDate) {
     lastHealthCheckDate = today;
-    runHealthCheck('daily-scheduled').catch(function(e) { log('[health] Scheduled error: ' + e.message); });
+    // runHealthCheck('daily-scheduled').catch(function(e) { log('[health] Scheduled error: ' + e.message); });
   }
   if (h === 9 && m === 0 && today !== lastReportDate) {
     lastReportDate = today;
