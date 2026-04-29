@@ -258,9 +258,12 @@ async function runResearcher(keyword) {
 function tgRequest(method, payload) {
   return new Promise(function(resolve, reject) {
     var body = JSON.stringify(payload);
+    var useProxy = method === 'sendMessage' && process.env.TG_PROXY_URL;
+    var proxyHost = useProxy ? 'bootstrapclaw-tg-proxy.danielwrites27.workers.dev' : 'api.telegram.org';
+    var proxyPath = useProxy ? '/sendMessage' : '/bot' + TG_TOKEN + '/' + method;
     var req = https.request({
-      hostname: 'api.telegram.org',
-      path: '/bot' + TG_TOKEN + '/' + method,
+      hostname: proxyHost,
+      path: proxyPath,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
     }, function(res) {
