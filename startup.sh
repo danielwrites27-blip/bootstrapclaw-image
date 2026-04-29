@@ -28,7 +28,7 @@ curl -s --max-time 30 -o /root/bootstrapclaw/chat-server.js https://raw.githubus
 curl -s --max-time 30 -o /root/bootstrapclaw/agent-chat.js https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/agent-chat.js || echo "[startup] Pull failed - using cached agent-chat.js"
 curl -s --max-time 30 -H "Authorization: token $GITHUB_TOKEN" -o /root/bootstrapclaw/package.json https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/package.json || echo "[startup] Pull failed - using cached package.json"
 curl -s --max-time 30 -H "Authorization: token $GITHUB_TOKEN" -o /root/bootstrapclaw/model-health-check.js https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/model-health-check.js || echo "[startup] Pull failed - using cached model-health-check.js"
-if [ ! -f /root/bootstrapclaw/data/models.json ]; then
+if true || [ ! -f /data/bootstrapclaw-data/models.json ]; then
   curl -s --max-time 30 -H "Authorization: token $GITHUB_TOKEN" -o /root/bootstrapclaw/data/models.json https://raw.githubusercontent.com/danielwrites27-blip/bootstrapclaw-image/main/models.json || echo "[startup] Pull failed - models.json not found"
 fi
 cd /root/bootstrapclaw && npm install --silent
