@@ -286,8 +286,24 @@ function send(text) {
 }
 
 async function registerWebhook() {
-  var url = 'https://wright27-bootstrapclaw.hf.space/webhook';
-  var res = await tgRequest('setWebhook', { url: url, allowed_updates: ['message'] });
+  var webhookUrl = 'https://wright27-bootstrapclaw.hf.space/webhook';
+  var token = TG_TOKEN;
+  var body = JSON.stringify({ url: webhookUrl, allowed_updates: ['message'] });
+  var res = await new Promise(function(resolve, reject) {
+    var req = https.request({
+      hostname: 'bootstrapclaw-tg-proxy.danielwrites27.workers.dev',
+      path: '/setWebhook',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), 'X-TG-Token': token }
+    }, function(r) {
+      var d = '';
+      r.on('data', function(c) { d += c; });
+      r.on('end', function() { try { resolve(JSON.parse(d)); } catch(e) { resolve({}); } });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
   log('[webhook] Register result: ' + JSON.stringify(res));
 }
 
