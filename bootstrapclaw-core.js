@@ -44,7 +44,7 @@ const PROVIDERS = {
   ollama:          { url: 'https://ollama.com/v1/chat/completions',          key: function(){ return process.env.OLLAMA_API_KEY; },    model: 'gemma3:27b',                    maxTokens: 2048 },
   groq_kimi:       { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'openai/gpt-oss-120b',           maxTokens: 4096 },
   groq_fallback:   { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'llama-3.3-70b-versatile',       maxTokens: 4096 },
-  cloudflare:      { url: 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct', key: function(){ return process.env.CLOUDFLARE_API_KEY; }, model: 'llama-4-scout-17b-16e-instruct', maxTokens: 4096, responseType: 'cloudflare' },
+  cloudflare:      { url: 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct', key: function(){ return process.env.CLOUDFLARE_API_KEY; }, model: '@cf/meta/llama-4-scout-17b-16e-instruct', maxTokens: 4096, responseType: 'cloudflare' },
   nvidia:          { url: 'https://integrate.api.nvidia.com/v1/chat/completions', key: function(){ return process.env.NVIDIA_API_KEY; }, model: 'nvidia/nemotron-3-super-120b-a12b', maxTokens: 4096 },
 };
 
@@ -148,8 +148,9 @@ async function callLLM(chain, sys, usr, opts) {
     if (!apiKey) { log('[LLM] No key for ' + key); continue; }
     try {
       var currentModel = getModel(key);
+      var cfModel = (key === 'cloudflare' && !currentModel.startsWith('@cf/')) ? '@cf/meta/' + currentModel : currentModel;
       var currentUrl = (key === 'cloudflare')
-        ? 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/' + currentModel
+        ? 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/' + cfModel
         : p.url;
       log('[LLM] Trying ' + key + ' (' + currentModel + ')');
       var onHdr = (key === 'cerebras') ? function(h) {
@@ -1209,27 +1210,31 @@ fs.mkdirSync(DRAFTS, { recursive: true });
 // Seed known published topics into used-topics.txt on every startup
 // Prevents dedup failures after fresh restores or missing backup data
 var KNOWN_PUBLISHED = [
-  'free ai tools for teachers',
-  'remote work productivity',
-  'affordable ai tools for small businesses',
-  'productivity tools for freelancers',
-  'automate invoicing as a freelancer',
-  'beginners guide to email marketing',
-  'how to write better emails at work',
-  'how to price your freelance services',
-  'best budgeting apps for self-employed',
-  'mastering time management for remote workers',
-  'how to build a personal brand online',
-  'how ai tools can help small businesses',
-  'how to get your first freelance client',
-  'how to create an online course',
-  'best invoicing software for freelancers',
-  'essential digital nomad tools and tips',
+  'how to automate your business workflows',
   'best project management tools for small teams',
+  'essential digital nomad tools and tips',
   'how to stay focused while working from home',
   'seo basics for bloggers',
   'how to write a cold email that gets replies',
+  'best invoicing software for freelancers',
+  'how to create an online course',
   'essential tools for managing remote teams',
+  'how to get your first freelance client',
+  'how ai tools can help small businesses',
+  'how to build a personal brand online',
+  'mastering time management for remote workers',
+  'best free tools for solopreneurs',
+  'passive income for developers',
+  'essential clauses for freelance contract',
+  'best budgeting apps for self-employed',
+  'how to price your freelance services',
+  'how to write better emails at work',
+  'beginners guide to email marketing',
+  'automate invoicing as a freelancer',
+  'productivity tools for freelancers',
+  'affordable ai tools for small businesses',
+  'remote work productivity',
+  'how ai tools are transforming student learning',
 ];
 try {
   var existingUsed = '';
