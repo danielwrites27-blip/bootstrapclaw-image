@@ -16,7 +16,7 @@ const USED     = BASE_DIR + '/data/used-topics.txt';
 
 if (!TG_TOKEN) { console.error('TELEGRAM_BOT_TOKEN not set'); process.exit(1); }
 
-// const { runHealthCheck, MODELS_PATH } = require('./model-health-check');
+const { runHealthCheck, MODELS_PATH } = require('./model-health-check');
 
 function getModel(key) {
   try {
@@ -380,7 +380,8 @@ async function handleStatus() {
 async function handleHealth() {
   await send('Running full provider health check...');
   try {
-    await send('⚠️ Health check temporarily disabled — model-health-check under maintenance.');
+    await send('🔍 Running provider health check...');
+    runHealthCheck('manual').then(function(r) { send('✅ Health check complete — ' + r.filter(x=>x.changed).length + ' model(s) updated.'); }).catch(function(e) { send('❌ Health check error: ' + e.message); });
   } catch(e) {
     await send('Health check error: ' + e.message);
   }
@@ -750,6 +751,11 @@ RULES:
   parsed.body_markdown = parsed.body_markdown.replace(/by leveraging/gi, 'using');
   parsed.body_markdown = parsed.body_markdown.replace(/in conclusion/gi, 'to summarize');
   parsed.body_markdown = parsed.body_markdown.replace(/what matters most/gi, 'the key priority');
+  // Mechanical first-person over-application strip
+  parsed.body_markdown = parsed.body_markdown.replace(/I've (worked with|used|introduced|tested|seen|tried|implemented|deployed|integrated|explored)[^.]*\./gi, '');
+  parsed.body_markdown = parsed.body_markdown.replace(/I can (say|attest|tell you|confirm|assure you) that /gi, '');
+  parsed.body_markdown = parsed.body_markdown.replace(/I personally (use|recommend|prefer|rely on|favour|favor)[^.]*\./gi, '');
+  parsed.body_markdown = parsed.body_markdown.replace(/\n{3,}/g, '\n\n');
   var wordCount = parsed.body_markdown.split(/\s+/).filter(Boolean).length;
   log('[P2.5] Humanized: ' + wordCount + ' words, provider: ' + result.provider);
   article.humanizer_provider = result.provider;
@@ -1281,7 +1287,7 @@ setInterval(function() {
   }
   if (h === 9 && m === 0 && today !== lastHealthCheckDate) {
     lastHealthCheckDate = today;
-    // runHealthCheck('daily-scheduled').catch(function(e) { log('[health] Scheduled error: ' + e.message); });
+    runHealthCheck('daily-scheduled').catch(function(e) { log('[health] Scheduled error: ' + e.message); });
   }
   if (h === 9 && m === 0 && today !== lastReportDate) {
     lastReportDate = today;

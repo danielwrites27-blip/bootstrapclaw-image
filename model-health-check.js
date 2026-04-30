@@ -229,7 +229,7 @@ async function checkProvider(providerKey, cfg) {
 
   // Step 2: current is dead — walk preferred list
   result.reason = `current model failed: ${pingResult.reason}`;
-  const candidates = [...cfg.preferred].filter(m => m !== oldModel);
+  const candidates = [...cfg.preferred].filter(m => m !== oldModel).sort((a, b) => (extractParamBillions(b) || 0) - (extractParamBillions(a) || 0));
 
   for (const candidate of candidates) {
     if (isBadModel(candidate)) continue;
@@ -286,6 +286,7 @@ async function checkProvider(providerKey, cfg) {
     ...discovered.filter(m => !tavilyRanked.includes(m) && !isBadModel(m, minParams) && !cfg.preferred.includes(m))
   ];
 
+  orderedCandidates.sort((a, b) => (extractParamBillions(b) || 0) - (extractParamBillions(a) || 0));
   for (const candidate of orderedCandidates) {
     const pr = await pingModel(providerKey, cfg, candidate);
     if (pr.ok) {
