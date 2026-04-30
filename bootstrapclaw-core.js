@@ -1206,6 +1206,42 @@ function handleWebhook(update) {
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 log('BootstrapClaw starting...');
 fs.mkdirSync(DRAFTS, { recursive: true });
+// Seed known published topics into used-topics.txt on every startup
+// Prevents dedup failures after fresh restores or missing backup data
+var KNOWN_PUBLISHED = [
+  'free ai tools for teachers',
+  'remote work productivity',
+  'affordable ai tools for small businesses',
+  'productivity tools for freelancers',
+  'automate invoicing as a freelancer',
+  'beginners guide to email marketing',
+  'how to write better emails at work',
+  'how to price your freelance services',
+  'best budgeting apps for self-employed',
+  'mastering time management for remote workers',
+  'how to build a personal brand online',
+  'how ai tools can help small businesses',
+  'how to get your first freelance client',
+  'how to create an online course',
+  'best invoicing software for freelancers',
+  'essential digital nomad tools and tips',
+  'best project management tools for small teams',
+  'how to stay focused while working from home',
+  'seo basics for bloggers',
+  'how to write a cold email that gets replies',
+  'essential tools for managing remote teams',
+];
+try {
+  var existingUsed = '';
+  try { existingUsed = fs.readFileSync(USED, 'utf8').toLowerCase(); } catch(_) {}
+  var toAdd = KNOWN_PUBLISHED.filter(function(t) { return existingUsed.indexOf(t) === -1; });
+  if (toAdd.length > 0) {
+    fs.appendFileSync(USED, toAdd.join('\n') + '\n');
+    log('[boot] Seeded ' + toAdd.length + ' known topics into used-topics.txt');
+  }
+} catch(e) {
+  log('[boot] Topic seed failed: ' + e.message);
+}
 send('🦞 *BootstrapClaw v2 online.*\nType /run [keyword] to start or /status to check.').catch(console.error);
 
 // ── HEALTH SERVER (port 7860 for Hugging Face Spaces) ─────────────────────
