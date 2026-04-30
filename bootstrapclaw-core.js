@@ -46,13 +46,16 @@ const PROVIDERS = {
   groq_fallback:   { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY; },      model: 'llama-3.3-70b-versatile',       maxTokens: 4096 },
   cloudflare:      { url: 'https://api.cloudflare.com/client/v4/accounts/96f0514b181a123694206cf8ecd50db3/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct', key: function(){ return process.env.CLOUDFLARE_API_KEY; }, model: '@cf/meta/llama-4-scout-17b-16e-instruct', maxTokens: 4096, responseType: 'cloudflare' },
   nvidia:          { url: 'https://integrate.api.nvidia.com/v1/chat/completions', key: function(){ return process.env.NVIDIA_API_KEY; }, model: 'nvidia/nemotron-3-super-120b-a12b', maxTokens: 4096 },
+  cerebras_b:      { url: 'https://api.cerebras.ai/v1/chat/completions',     key: function(){ return process.env.CEREBRAS_API_KEY_CHAT; },  model: 'qwen-3-235b-a22b-instruct-2507', maxTokens: 8192 },
+  sambanova_b:     { url: 'https://api.sambanova.ai/v1/chat/completions',    key: function(){ return process.env.SAMBANOVA_API_KEY_CHAT; }, model: 'Llama-4-Maverick-17B-128E-Instruct', maxTokens: 8192 },
+  groq_b:          { url: 'https://api.groq.com/openai/v1/chat/completions', key: function(){ return process.env.GROQ_API_KEY_CHAT; },      model: 'llama-3.3-70b-versatile',       maxTokens: 4096 },
 };
 
 const CHAINS = {
 researcher:   ['sambanova_llama', 'sambanova_maverick', 'ollama', 'groq_kimi', 'groq_fallback'],
-writer:       ['cerebras', 'cloudflare', 'sambanova_maverick', 'sambanova_llama', 'ollama', 'groq_kimi', 'groq_fallback'],
+writer:       ['cerebras', 'cerebras_b', 'cloudflare', 'sambanova_maverick', 'sambanova_b', 'sambanova_llama', 'ollama', 'groq_kimi', 'groq_b', 'groq_fallback'],
 humanizer:    ['groq_kimi', 'groq_fallback'],
-orchestrator: ['cerebras', 'groq_kimi', 'groq_fallback'],
+orchestrator: ['cerebras', 'cerebras_b', 'groq_kimi', 'groq_b', 'groq_fallback'],
 };
 
 // ── STATE ────────────────────────────────────────────────────────────────────
