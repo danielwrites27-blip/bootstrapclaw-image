@@ -50,7 +50,7 @@ const PROVIDERS = {
 
 const CHAINS = {
 researcher:   ['sambanova_llama', 'sambanova_maverick', 'ollama', 'groq_kimi', 'groq_fallback'],
-writer:       ['cerebras', 'cloudflare', 'sambanova_maverick', 'sambanova_llama', 'ollama', 'nvidia', 'groq_kimi', 'groq_fallback'],
+writer:       ['cerebras', 'cloudflare', 'sambanova_maverick', 'sambanova_llama', 'ollama', 'groq_kimi', 'groq_fallback'],
 humanizer:    ['groq_kimi', 'groq_fallback'],
 orchestrator: ['cerebras', 'groq_kimi', 'groq_fallback'],
 };
