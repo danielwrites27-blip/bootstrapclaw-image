@@ -1106,7 +1106,7 @@ async function handleApprove() {
     var elapsed = Math.round((Date.now() - draft.pipelineStart) / 1000);
     var validatorMsg = validation.failed.length > 0
       ? '⚠️ *Validator: ' + validation.passed + '/' + validation.total + ' checks passed*\nFailed: ' + validation.failed.join(', ')
-      : '✅ *Validator: 7/7 checks passed*';
+      : '✅ *Validator: ' + validation.passed + '/' + validation.total + ' checks passed*';
     await send(validatorMsg);
     var p1 = (draft.research.provider||'?').replace(/_/g,'-');
     var p2 = (draft.article.provider||'?').replace(/_/g,'-');
@@ -1155,7 +1155,7 @@ async function runPipeline(keyword) {
     var elapsed = Math.round((Date.now() - pipelineStart) / 1000);
     var validatorMsg = validation.failed.length > 0
       ? '⚠️ *Validator: ' + validation.passed + '/' + validation.total + ' checks passed*\nFailed: ' + validation.failed.join(', ')
-      : '✅ *Validator: 7/7 checks passed*';
+      : '✅ *Validator: ' + validation.passed + '/' + validation.total + ' checks passed*';
     await send(validatorMsg);
     var p1 = (research.provider||'?').replace(/_/g,'-');
     var p2 = (article.provider||'?').replace(/_/g,'-');
