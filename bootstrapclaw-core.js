@@ -1166,7 +1166,7 @@ async function runDraftPipeline(keyword) {
     }
     pendingDraft = { article: article, research: research, keyword: keyword, pipelineStart: pipelineStart };
     pipelineStatus = 'draft_pending';
-    var preview = article.body_markdown.replace(/!\[.*?\]\(.*?\)\n\n/, '').replace(/https?:\/\/[^\s)]+/g, '[link]').slice(0, 300);
+    var preview = article.body_markdown.replace(/!\[.*?\]\(.*?\)\n\n/, '').replace(/https?:\/\/[^\s)]+/g, '[link]').replace(/[*_`#]/g, '').slice(0, 300);
     await send('📋 *Draft ready for review*\n\n*Title:* ' + article.title + '\n*Words:* ' + article.word_count + '\n\n*Preview:*\n' + preview + '...\n\n/approve — publish to Dev.to\n/reject — discard draft');
   } catch(err) {
     pipelineStatus = 'idle';
