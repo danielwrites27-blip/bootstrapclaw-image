@@ -1146,6 +1146,13 @@ async function runDraftPipeline(keyword) {
   try {
     var research = await runResearcher(keyword);
     var article = await runWriter(research);
+    var titleCheck = isTopicUsed(article.title);
+    if (titleCheck.used) {
+      log('[dedup] Writer generated duplicate title: ' + article.title + ' — ' + titleCheck.reason);
+      await send('⚠️ *Dedup blocked:* Writer generated a title too similar to a published article.\nReason: ' + titleCheck.reason + '\nUse /draft with a different keyword.');
+      pipelineStatus = 'idle'; currentKeyword = null;
+      return;
+    }
     await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
     article = await runHumanizer(article);
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
@@ -1221,6 +1228,13 @@ async function runPipeline(keyword) {
   try {
     var research = await runResearcher(keyword);
     var article = await runWriter(research);
+    var titleCheck = isTopicUsed(article.title);
+    if (titleCheck.used) {
+      log('[dedup] Writer generated duplicate title: ' + article.title + ' — ' + titleCheck.reason);
+      await send('⚠️ *Dedup blocked:* Writer generated a title too similar to a published article.\nReason: ' + titleCheck.reason + '\nBlocking publish.');
+      pipelineStatus = 'idle'; currentKeyword = null;
+      return;
+    }
     await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
     article = await runHumanizer(article);
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
@@ -1326,6 +1340,7 @@ var KNOWN_PUBLISHED = [
   'affordable ai tools for small businesses',
   'remote work productivity',
   'how ai tools are transforming student learning',
+  'side hustle ideas for software developers',
 ];
 try {
   var existingUsed = '';
