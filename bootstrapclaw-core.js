@@ -1312,44 +1312,35 @@ function handleWebhook(update) {
 // ── BOOT ─────────────────────────────────────────────────────────────────────
 log('BootstrapClaw starting...');
 fs.mkdirSync(DRAFTS, { recursive: true });
-// Seed known published topics into used-topics.txt on every startup
-// Prevents dedup failures after fresh restores or missing backup data
-var KNOWN_PUBLISHED = [
-  'how to automate your business workflows',
-  'best project management tools for small teams',
-  'essential digital nomad tools and tips',
-  'how to stay focused while working from home',
-  'seo basics for bloggers',
-  'how to write a cold email that gets replies',
-  'best invoicing software for freelancers',
-  'how to create an online course',
-  'essential tools for managing remote teams',
-  'how to get your first freelance client',
-  'how ai tools can help small businesses',
-  'how to build a personal brand online',
-  'mastering time management for remote workers',
-  'best free tools for solopreneurs',
-  'passive income for developers',
-  'essential clauses for freelance contract',
-  'best budgeting apps for self-employed',
-  'how to price your freelance services',
-  'how to write better emails at work',
-  'beginners guide to email marketing',
-  'automate invoicing as a freelancer',
-  'productivity tools for freelancers',
-  'affordable ai tools for small businesses',
-  'remote work productivity',
-  'how ai tools are transforming student learning',
-  'side hustle ideas for software developers',
-];
+// Seed published article titles from runs.log into used-topics.txt on every startup
+// Prevents dedup failures after fresh restores — self-maintaining, no manual updates needed
 try {
   var existingUsed = '';
   try { existingUsed = fs.readFileSync(USED, 'utf8').toLowerCase(); } catch(_) {}
-  var toAdd = KNOWN_PUBLISHED.filter(function(t) { return existingUsed.indexOf(t) === -1; });
-  if (toAdd.length > 0) {
-    fs.appendFileSync(USED, toAdd.join('\n') + '\n');
-    log('[boot] Seeded ' + toAdd.length + ' known topics into used-topics.txt');
-  }
+  var seeded = 0;
+  try {
+    var runs = JSON.parse(fs.readFileSync(RUNS_LOG, 'utf8'));
+    runs.forEach(function(r) {
+      if (r.status === 'published' && r.title) {
+        var t = r.title.toLowerCase().trim();
+        if (existingUsed.indexOf(t) === -1) {
+          fs.appendFileSync(USED, t + '\n');
+          existingUsed += t + '\n';
+          seeded++;
+        }
+      }
+      if (r.status === 'published' && r.keyword) {
+        var k = r.keyword.toLowerCase().trim();
+        if (existingUsed.indexOf(k) === -1) {
+          fs.appendFileSync(USED, k + '\n');
+          existingUsed += k + '\n';
+          seeded++;
+        }
+      }
+    });
+  } catch(_) {}
+  if (seeded > 0) log('[boot] Seeded ' + seeded + ' topics from runs.log into used-topics.txt');
+  else log('[boot] used-topics.txt already up to date');
 } catch(e) {
   log('[boot] Topic seed failed: ' + e.message);
 }
