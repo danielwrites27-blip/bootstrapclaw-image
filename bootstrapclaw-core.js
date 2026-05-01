@@ -919,6 +919,74 @@ function runContentQualityCheck(article) {
   return { passed: issues.length === 0, issues: issues };
 }
 
+async function pingDomain(domain) {
+  return new Promise(function(resolve) {
+    var req = https.request({
+      hostname: domain, path: '/', method: 'HEAD', timeout: 4000,
+      headers: { 'User-Agent': 'BootstrapClaw/1.0' }
+    }, function(res) { resolve(true); });
+    req.on('error', function() { resolve(false); });
+    req.on('timeout', function() { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
+
+async function runSourceCheck(article) {
+  var body = article.body_markdown || '';
+  var patterns = [
+    /according to ([A-Z][^,.\n]{2,60})[,.\n]/g,
+    /a (?:study|report|survey|research) (?:by|from) ([A-Z][^,.\n]{2,60})[,.\n]/g,
+    /as (?:noted|reported|stated|found) by ([A-Z][^,.\n]{2,60})[,.\n]/g,
+    /research (?:from|by) ([A-Z][^,.\n]{2,60})[,.\n]/g,
+    /data (?:from|by) ([A-Z][^,.\n]{2,60})[,.\n]/g,
+    /(?:survey|study|report) (?:from|by|published by) ([A-Z][^,.\n]{2,60})[,.\n]/g,
+  ];
+  var sources = new Set();
+  patterns.forEach(function(p) {
+    var m;
+    while ((m = p.exec(body)) !== null) {
+      var s = m[1].trim();
+      if (s.length > 3 && s.length < 60 && !/^(the|a|an|this|that|it|they)\b/i.test(s)) sources.add(s);
+    }
+  });
+  if (sources.size === 0) return { passed: true, hallucinated: [], checked: 0, total_sources: 0 };
+  var TRUSTED_NAMES = ['gallup','forbes','harvard','mckinsey','gartner','pew research',
+    'techcrunch','wired','new york times','wall street journal','bloomberg','reuters',
+    'bbc','the economist','nerdwallet','business insider','cnbc','linkedin','wikipedia',
+    'upwork','fiverr','shopify','hubspot','salesforce','microsoft','google','apple',
+    'github','indeed','glassdoor','entrepreneur','inc magazine','fast company',
+    'bureau of labor','u.s. census','world bank','imf','oecd','united nations',
+    'world health organization','cdc','deloitte','pwc','kpmg','accenture','ibm',
+    'oracle','amazon','meta','stripe','paypal','intuit','freshbooks','quickbooks',
+    'xero','grammarly','canva','notion','slack','zoom','dropbox','asana','trello',
+    'monday.com','airtable','statista','capterra','clutch','g2'];
+  var TRUSTED_DOMAINS = new Set(['gallup.com','forbes.com','harvard.edu','hbr.org',
+    'mckinsey.com','statista.com','gartner.com','pewresearch.org','techcrunch.com',
+    'wired.com','nytimes.com','wsj.com','bloomberg.com','reuters.com','bbc.com',
+    'economist.com','nerdwallet.com','businessinsider.com','cnbc.com','linkedin.com',
+    'wikipedia.org','upwork.com','fiverr.com','shopify.com','hubspot.com',
+    'salesforce.com','microsoft.com','google.com','apple.com','github.com',
+    'stackoverflow.com','indeed.com','glassdoor.com','entrepreneur.com','inc.com',
+    'fastcompany.com','capterra.com','g2.com','clutch.co']);
+  var hallucinated = [];
+  var checked = 0;
+  var srcArray = Array.from(sources);
+  for (var i = 0; i < srcArray.length; i++) {
+    var src = srcArray[i];
+    var sl = src.toLowerCase();
+    if (TRUSTED_NAMES.some(function(t) { return sl.includes(t); })) continue;
+    var dm = src.match(/\b([a-zA-Z0-9-]+\.(?:com|io|org|net|co|ai|app|info|biz|us|uk)(?:\.[a-zA-Z]{2})?)\b/i);
+    if (!dm) continue;
+    var domain = dm[1].toLowerCase();
+    if (TRUSTED_DOMAINS.has(domain)) continue;
+    checked++;
+    var alive = await pingDomain(domain);
+    log('[P2.6] ' + domain + ' -> ' + (alive ? 'OK' : 'UNREACHABLE'));
+    if (!alive) hallucinated.push({ source: src, domain: domain });
+  }
+  return { passed: hallucinated.length === 0, hallucinated: hallucinated, checked: checked, total_sources: sources.size };
+}
+
 async function handleAudit() {
   await send('🔍 *Article Audit Started*\nFetching all published articles from Dev.to...');
   try {
@@ -1079,6 +1147,14 @@ async function runDraftPipeline(keyword) {
     await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
     article = await runHumanizer(article);
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
+    var sc = await runSourceCheck(article);
+    if (sc.checked > 0) {
+      if (!sc.passed) {
+        await send('⚠️ *Source Check:* ' + sc.hallucinated.length + ' unverifiable domain(s):\n' + sc.hallucinated.map(function(h) { return '- ' + h.source + ' (' + h.domain + ')'; }).join('\n') + '\nReview before approving.');
+      } else {
+        await send('✅ *Source Check: ' + sc.checked + '/' + sc.checked + ' domains verified*');
+      }
+    }
     var qcDraft = runContentQualityCheck(article);
     if (!qcDraft.passed) {
       log('[quality] Draft issues: ' + qcDraft.issues.join(', '));
@@ -1146,6 +1222,16 @@ async function runPipeline(keyword) {
     await send('🧹 *Phase 2.5 — Humanizing*\nRemoving AI patterns...');
     article = await runHumanizer(article);
     await send('✅ *Phase 2.5 complete*\n📝 ' + article.word_count + ' words after humanizing');
+    var sc = await runSourceCheck(article);
+    if (sc.checked > 0) {
+      if (!sc.passed) {
+        log('[P2.6] Hallucinated sources: ' + sc.hallucinated.map(function(h) { return h.domain; }).join(', '));
+        await send('⚠️ *Source Check failed:* ' + sc.hallucinated.length + ' unverifiable domain(s): ' + sc.hallucinated.map(function(h) { return h.domain; }).join(', ') + '\nBlocking publish — use /draft to review.');
+        throw new Error('Source check failed: ' + sc.hallucinated.map(function(h) { return h.domain; }).join(', '));
+      } else {
+        await send('✅ *Source Check: ' + sc.checked + '/' + sc.checked + ' domains verified*');
+      }
+    }
     var qcRun = runContentQualityCheck(article);
     if (!qcRun.passed) {
       log('[quality] Pipeline issues: ' + qcRun.issues.join(', '));
