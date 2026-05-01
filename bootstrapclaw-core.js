@@ -24,13 +24,15 @@ function getModel(key) {
   } catch(_) {
     var fb = {
       cerebras:'qwen-3-235b-a22b-instruct-2507',
+      cerebras_b:'qwen-3-235b-a22b-instruct-2507',
       cloudflare:'@cf/meta/llama-4-scout-17b-16e-instruct',
       sambanova_maverick:'Llama-4-Maverick-17B-128E-Instruct',
+      sambanova_b:'Llama-4-Maverick-17B-128E-Instruct',
       sambanova_llama:'Meta-Llama-3.3-70B-Instruct',
       ollama:'gemma3:27b',
-      nvidia:'nvidia/nemotron-3-super-120b-a12b',
-      groq_kimi:'openai/gpt-oss-120b',
-      groq_fallback:'llama-3.3-70b-versatile'
+      groq_kimi:'llama-3.3-70b-versatile',
+      groq_b:'llama-3.3-70b-versatile',
+      groq_fallback:'llama-3.1-8b-instant'
     };
     return fb[key] || key;
   }
